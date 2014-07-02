@@ -46,7 +46,6 @@ var logger = loggo.GetLogger("juju.provider.openstack")
 type environProvider struct{}
 
 var _ environs.EnvironProvider = (*environProvider)(nil)
-
 var providerInstance environProvider
 
 // Use shortAttempt to poll for short-term events.
@@ -278,6 +277,8 @@ func retryGet(uri string) (data []byte, err error) {
 
 type environ struct {
 	common.SupportsUnitPlacementPolicy
+	common.InstanceTyper
+	common.EnvironCapability
 
 	name string
 
@@ -311,6 +312,7 @@ var _ envtools.SupportsCustomSources = (*environ)(nil)
 var _ simplestreams.HasRegion = (*environ)(nil)
 var _ state.Prechecker = (*environ)(nil)
 var _ state.InstanceDistributor = (*environ)(nil)
+var _ common.EnvironCapability = (*environ)(nil)
 
 type openstackInstance struct {
 	e        *environ
@@ -527,17 +529,41 @@ func (e *environ) ConstraintsValidator() (constraints.Validator, error) {
 		return nil, err
 	}
 	validator.RegisterVocabulary(constraints.Arch, supportedArches)
+
+	instanceTypeNames, err := common.InstanceTypeNames(e)
+	if err != nil {
+		return nil, err
+	}
+	validator.RegisterVocabulary(constraints.InstanceType, instanceTypeNames)
+
+	return validator, nil
+}
+
+func (e *environ) InstanceTypes() ([]instances.InstanceType, error) {
 	novaClient := e.nova()
 	flavors, err := novaClient.ListFlavorsDetail()
 	if err != nil {
 		return nil, err
 	}
-	instTypeNames := make([]string, len(flavors))
-	for i, flavor := range flavors {
-		instTypeNames[i] = flavor.Name
+
+	supportedArchitectures, err := e.SupportedArchitectures()
+	if err != nil {
+		return nil, err
 	}
-	validator.RegisterVocabulary(constraints.InstanceType, instTypeNames)
-	return validator, nil
+
+	instanceTypes := make([]instances.InstanceType, len(flavors))
+	for i, flavor := range flavors {
+		instanceTypes[i] = instances.InstanceType{
+			Id:       flavor.Id,
+			Name:     flavor.Name,
+			Arches:   supportedArchitectures,
+			CpuCores: uint64(flavor.VCPUs),
+			Mem:      uint64(flavor.RAM),
+			RootDisk: uint64(flavor.Disk),
+		}
+	}
+
+	return instanceTypes, nil
 }
 
 var novaListAvailabilityZones = (*nova.Client).ListAvailabilityZones

@@ -30,6 +30,7 @@ import (
 	"github.com/juju/juju/environs/config"
 	"github.com/juju/juju/environs/filestorage"
 	"github.com/juju/juju/environs/httpstorage"
+	"github.com/juju/juju/environs/instances"
 	"github.com/juju/juju/environs/simplestreams"
 	"github.com/juju/juju/environs/storage"
 	envtools "github.com/juju/juju/environs/tools"
@@ -51,14 +52,9 @@ import (
 // Using "localhost" because it is, and it makes sense.
 const bootstrapInstanceId instance.Id = "localhost"
 
-// localEnviron implements Environ.
-var _ environs.Environ = (*localEnviron)(nil)
-
-// localEnviron implements SupportsCustomSources.
-var _ envtools.SupportsCustomSources = (*localEnviron)(nil)
-
 type localEnviron struct {
 	common.SupportsUnitPlacementPolicy
+	common.EnvironCapability
 
 	localMutex       sync.Mutex
 	config           *environConfig
@@ -69,11 +65,25 @@ type localEnviron struct {
 	containerManager container.Manager
 }
 
+var _ environs.Environ = (*localEnviron)(nil)
+var _ envtools.SupportsCustomSources = (*localEnviron)(nil)
+var _ common.EnvironCapability = (*localEnviron)(nil)
+
 // GetToolsSources returns a list of sources which are used to search for simplestreams tools metadata.
 func (e *localEnviron) GetToolsSources() ([]simplestreams.DataSource, error) {
 	// Add the simplestreams source off the control bucket.
 	return []simplestreams.DataSource{
 		storage.NewStorageSimpleStreamsDataSource("cloud storage", e.Storage(), storage.BaseToolsPath)}, nil
+}
+
+// AvailabilityZones is specified on the EnvironCapability interface.
+func (env *localEnviron) AvailabilityZones() ([]common.AvailabilityZone, error) {
+	return []common.AvailabilityZone{}, nil
+}
+
+// InstanceTypes is specified on the EnvironCapability interface.
+func (env *localEnviron) InstanceTypes() ([]instances.InstanceType, error) {
+	return []instances.InstanceType{}, nil
 }
 
 // SupportedArchitectures is specified on the EnvironCapability interface.

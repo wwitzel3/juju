@@ -51,6 +51,8 @@ var providerInstance environProvider
 
 type environ struct {
 	common.SupportsUnitPlacementPolicy
+	common.InstanceTyper
+	common.EnvironCapability
 
 	name string
 
@@ -77,6 +79,7 @@ var _ imagemetadata.SupportsCustomSources = (*environ)(nil)
 var _ envtools.SupportsCustomSources = (*environ)(nil)
 var _ state.Prechecker = (*environ)(nil)
 var _ state.InstanceDistributor = (*environ)(nil)
+var _ common.EnvironCapability = (*environ)(nil)
 
 type ec2Instance struct {
 	e *environ
@@ -363,12 +366,17 @@ func (e *environ) ConstraintsValidator() (constraints.Validator, error) {
 		return nil, err
 	}
 	validator.RegisterVocabulary(constraints.Arch, supportedArches)
-	instTypeNames := make([]string, len(allInstanceTypes))
-	for i, itype := range allInstanceTypes {
-		instTypeNames[i] = itype.Name
+
+	instanceTypeNames, err := common.InstanceTypeNames(e)
+	if err != nil {
+		return nil, err
 	}
-	validator.RegisterVocabulary(constraints.InstanceType, instTypeNames)
+	validator.RegisterVocabulary(constraints.InstanceType, instanceTypeNames)
 	return validator, nil
+}
+
+func (e *environ) InstanceTypes() ([]instances.InstanceType, error) {
+	return allInstanceTypes, nil
 }
 
 func archMatches(arches []string, arch *string) bool {

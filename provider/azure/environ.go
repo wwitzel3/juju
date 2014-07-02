@@ -61,6 +61,9 @@ var (
 )
 
 type azureEnviron struct {
+	common.InstanceTyper
+	common.EnvironCapability
+
 	// Except where indicated otherwise, all fields in this object should
 	// only be accessed using a lock or a snapshot.
 	sync.Mutex
@@ -92,6 +95,7 @@ var _ simplestreams.HasRegion = (*azureEnviron)(nil)
 var _ imagemetadata.SupportsCustomSources = (*azureEnviron)(nil)
 var _ envtools.SupportsCustomSources = (*azureEnviron)(nil)
 var _ state.Prechecker = (*azureEnviron)(nil)
+var _ common.EnvironCapability = (*azureEnviron)(nil)
 
 // NewEnviron creates a new azureEnviron.
 func NewEnviron(cfg *config.Config) (*azureEnviron, error) {
@@ -457,20 +461,21 @@ func (env *azureEnviron) ConstraintsValidator() (constraints.Validator, error) {
 	}
 	validator.RegisterVocabulary(constraints.Arch, supportedArches)
 
-	instanceTypes, err := listInstanceTypes(env)
+	instanceTypeNames, err := common.InstanceTypeNames(env)
 	if err != nil {
 		return nil, err
 	}
-	instTypeNames := make([]string, len(instanceTypes))
-	for i, instanceType := range instanceTypes {
-		instTypeNames[i] = instanceType.Name
-	}
-	validator.RegisterVocabulary(constraints.InstanceType, instTypeNames)
+	validator.RegisterVocabulary(constraints.InstanceType, instanceTypeNames)
+
 	validator.RegisterConflicts(
 		[]string{constraints.InstanceType},
 		[]string{constraints.Mem, constraints.CpuCores, constraints.Arch, constraints.RootDisk})
 
 	return validator, nil
+}
+
+func (env *azureEnviron) InstanceTypes() ([]instances.InstanceType, error) {
+	return listInstanceTypes(env)
 }
 
 // PrecheckInstance is defined on the state.Prechecker interface.

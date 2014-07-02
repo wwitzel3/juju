@@ -20,6 +20,7 @@ import (
 	"github.com/juju/juju/environs"
 	"github.com/juju/juju/environs/config"
 	"github.com/juju/juju/environs/httpstorage"
+	"github.com/juju/juju/environs/instances"
 	"github.com/juju/juju/environs/manual"
 	"github.com/juju/juju/environs/simplestreams"
 	"github.com/juju/juju/environs/sshstorage"
@@ -52,6 +53,7 @@ var logger = loggo.GetLogger("juju.provider.manual")
 
 type manualEnviron struct {
 	common.SupportsUnitPlacementPolicy
+	common.EnvironCapability
 
 	cfg                 *environConfig
 	cfgmutex            sync.Mutex
@@ -61,6 +63,7 @@ type manualEnviron struct {
 }
 
 var _ envtools.SupportsCustomSources = (*manualEnviron)(nil)
+var _ common.EnvironCapability = (*manualEnviron)(nil)
 
 var errNoStartInstance = errors.New("manual provider cannot start instances")
 var errNoStopInstance = errors.New("manual provider cannot stop instances")
@@ -90,6 +93,16 @@ func (e *manualEnviron) Config() *config.Config {
 
 func (e *manualEnviron) Name() string {
 	return e.envConfig().Name()
+}
+
+// AvailabilityZones is specified on the EnvironCapability interface.
+func (env *manualEnviron) AvailabilityZones() ([]common.AvailabilityZone, error) {
+	return []common.AvailabilityZone{}, nil
+}
+
+// InstanceTypes is specified on the EnvironCapability interface.
+func (env *manualEnviron) InstanceTypes() ([]instances.InstanceType, error) {
+	return []instances.InstanceType{}, nil
 }
 
 // SupportedArchitectures is specified on the EnvironCapability interface.

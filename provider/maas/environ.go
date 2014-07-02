@@ -25,6 +25,7 @@ import (
 	"github.com/juju/juju/environs"
 	"github.com/juju/juju/environs/config"
 	"github.com/juju/juju/environs/imagemetadata"
+	"github.com/juju/juju/environs/instances"
 	"github.com/juju/juju/environs/simplestreams"
 	"github.com/juju/juju/environs/storage"
 	envtools "github.com/juju/juju/environs/tools"
@@ -53,6 +54,7 @@ var shortAttempt = utils.AttemptStrategy{
 
 type maasEnviron struct {
 	common.SupportsUnitPlacementPolicy
+	common.EnvironCapability
 
 	name string
 
@@ -73,6 +75,7 @@ type maasEnviron struct {
 var _ environs.Environ = (*maasEnviron)(nil)
 var _ imagemetadata.SupportsCustomSources = (*maasEnviron)(nil)
 var _ envtools.SupportsCustomSources = (*maasEnviron)(nil)
+var _ common.EnvironCapability = (*maasEnviron)(nil)
 
 func NewEnviron(cfg *config.Config) (*maasEnviron, error) {
 	env := new(maasEnviron)
@@ -143,6 +146,16 @@ func (env *maasEnviron) SetConfig(cfg *config.Config) error {
 	env.maasClientUnlocked = gomaasapi.NewMAAS(*authClient)
 
 	return nil
+}
+
+// AvailabilityZones is specified on the EnvironCapability interface.
+func (env *maasEnviron) AvailabilityZones() ([]common.AvailabilityZone, error) {
+	return []common.AvailabilityZone{}, nil
+}
+
+// InstanceTypes is specified on the EnvironCapability interface.
+func (env *maasEnviron) InstanceTypes() ([]instances.InstanceType, error) {
+	return []instances.InstanceType{}, nil
 }
 
 // SupportedArchitectures is specified on the EnvironCapability interface.

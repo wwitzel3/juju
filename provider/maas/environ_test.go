@@ -13,6 +13,7 @@ import (
 	"github.com/juju/juju/environs/config"
 	envtesting "github.com/juju/juju/environs/testing"
 	"github.com/juju/juju/network"
+	"github.com/juju/juju/provider/common"
 	"github.com/juju/juju/provider/maas"
 	coretesting "github.com/juju/juju/testing"
 )
@@ -193,6 +194,18 @@ func (*environSuite) TestNewEnvironSetsConfig(c *gc.C) {
 
 	c.Check(err, gc.IsNil)
 	c.Check(env.Name(), gc.Equals, "testenv")
+}
+
+func (*environSuite) TestNewEnvironCapabilities(c *gc.C) {
+	cfg := getSimpleTestConfig(c, nil)
+	env, err := maas.NewEnviron(cfg)
+	c.Check(err, gc.IsNil)
+
+	capabilities, err := common.NewEnvironCapabilities(env)
+	c.Check(err, gc.IsNil)
+
+	result := capabilities.Result()
+	c.Check(result, gc.NotNil)
 }
 
 func (*environSuite) TestNewCloudinitConfig(c *gc.C) {

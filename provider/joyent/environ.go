@@ -22,6 +22,8 @@ import (
 
 type joyentEnviron struct {
 	common.SupportsUnitPlacementPolicy
+	common.InstanceTyper
+	common.EnvironCapability
 
 	name string
 
@@ -43,6 +45,7 @@ type joyentEnviron struct {
 
 var _ environs.Environ = (*joyentEnviron)(nil)
 var _ state.Prechecker = (*joyentEnviron)(nil)
+var _ common.EnvironCapability = (*joyentEnviron)(nil)
 
 // newEnviron create a new Joyent environ instance from config.
 func newEnviron(cfg *config.Config) (*joyentEnviron, error) {

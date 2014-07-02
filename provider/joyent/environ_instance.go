@@ -23,6 +23,7 @@ import (
 	"github.com/juju/juju/instance"
 	"github.com/juju/juju/juju/arch"
 	"github.com/juju/juju/network"
+	"github.com/juju/juju/provider/common"
 	"github.com/juju/juju/tools"
 )
 
@@ -68,16 +69,39 @@ func (env *joyentEnviron) ConstraintsValidator() (constraints.Validator, error) 
 		return nil, err
 	}
 	validator.RegisterVocabulary(constraints.Arch, supportedArches)
+
+	instanceTypeNames, err := common.InstanceTypeNames(env)
+	if err != nil {
+		return nil, err
+	}
+	validator.RegisterVocabulary(constraints.InstanceType, instanceTypeNames)
+	return validator, nil
+}
+
+// InstanceTypes returns a slice of InstanceType mapped from the Joyent package.
+func (env *joyentEnviron) InstanceTypes() ([]instances.InstanceType, error) {
 	packages, err := env.compute.cloudapi.ListPackages(nil)
 	if err != nil {
 		return nil, err
 	}
-	instTypeNames := make([]string, len(packages))
-	for i, pkg := range packages {
-		instTypeNames[i] = pkg.Name
+
+	supportedArchitectures, err := env.SupportedArchitectures()
+	if err != nil {
+		return nil, err
 	}
-	validator.RegisterVocabulary(constraints.InstanceType, instTypeNames)
-	return validator, nil
+
+	instanceTypes := make([]instances.InstanceType, len(packages))
+	for i, pkg := range packages {
+		instanceTypes[i] = instances.InstanceType{
+			Id:       pkg.Id,
+			Name:     pkg.Name,
+			Arches:   supportedArchitectures,
+			CpuCores: uint64(pkg.VCPUs),
+			Mem:      uint64(pkg.Memory),
+			RootDisk: uint64(pkg.Disk),
+		}
+	}
+	return instanceTypes, nil
 }
 
 func (env *joyentEnviron) StartInstance(args environs.StartInstanceParams) (instance.Instance, *instance.HardwareCharacteristics, []network.Info, error) {

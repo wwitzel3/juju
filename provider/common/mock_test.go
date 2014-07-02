@@ -10,6 +10,7 @@ import (
 	"github.com/juju/juju/environs"
 	"github.com/juju/juju/environs/cloudinit"
 	"github.com/juju/juju/environs/config"
+	"github.com/juju/juju/environs/instances"
 	"github.com/juju/juju/environs/simplestreams"
 	"github.com/juju/juju/environs/storage"
 	"github.com/juju/juju/instance"
@@ -51,6 +52,29 @@ func (env *mockEnviron) Storage() storage.Storage {
 func (env *mockEnviron) AllInstances() ([]instance.Instance, error) {
 	return env.allInstances()
 }
+
+func (env *mockEnviron) InstanceTypes() ([]instances.InstanceType, error) {
+	var instanceTypes = []instances.InstanceType{
+		{
+			Name:     "m1.small",
+			Arches:   []string{"amd64", "armhf"},
+			CpuCores: 1,
+			CpuPower: instances.CpuPower(100),
+			Mem:      1740,
+			Cost:     60,
+			RootDisk: 8192,
+		}, {
+			Name:     "m1.medium",
+			Arches:   []string{"amd64", "armhf"},
+			CpuCores: 1,
+			CpuPower: instances.CpuPower(200),
+			Mem:      3840,
+			Cost:     120,
+			RootDisk: 16384,
+		}}
+	return instanceTypes, nil
+}
+
 func (env *mockEnviron) StartInstance(args environs.StartInstanceParams) (instance.Instance, *instance.HardwareCharacteristics, []network.Info, error) {
 	return env.startInstance(
 		args.Placement,
@@ -143,6 +167,7 @@ func (stor *mockStorage) RemoveAll() error {
 }
 
 type mockAvailabilityZone struct {
+	common.AvailabilityZone
 	name      string
 	available bool
 }
