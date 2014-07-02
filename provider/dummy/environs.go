@@ -44,6 +44,7 @@ import (
 	"github.com/juju/juju/environs/bootstrap"
 	"github.com/juju/juju/environs/config"
 	"github.com/juju/juju/environs/imagemetadata"
+	"github.com/juju/juju/environs/instances"
 	"github.com/juju/juju/environs/simplestreams"
 	"github.com/juju/juju/environs/storage"
 	"github.com/juju/juju/environs/tools"
@@ -201,6 +202,7 @@ type environState struct {
 // state.
 type environ struct {
 	common.SupportsUnitPlacementPolicy
+	common.EnvironCapability
 
 	name         string
 	ecfgMutex    sync.Mutex
@@ -210,6 +212,7 @@ type environ struct {
 var _ imagemetadata.SupportsCustomSources = (*environ)(nil)
 var _ tools.SupportsCustomSources = (*environ)(nil)
 var _ environs.Environ = (*environ)(nil)
+var _ common.EnvironCapability = (*environ)(nil)
 
 // discardOperations discards all Operations written to it.
 var discardOperations chan<- Operation
@@ -546,6 +549,46 @@ func (e *environ) checkBroken(method string) error {
 
 func (e *environ) Name() string {
 	return e.name
+}
+
+type DummyAvailabilityZone struct {
+	common.AvailabilityZone
+	name      string
+	available bool
+}
+
+func (d *DummyAvailabilityZone) Name() string {
+	return d.name
+}
+
+func (d *DummyAvailabilityZone) Available() bool {
+	return d.available
+}
+
+func (e *environ) AvailabilityZones() ([]common.AvailabilityZone, error) {
+	availabilityZones := make([]common.AvailabilityZone, 2)
+	for i := range availabilityZones {
+		availabilityZones[i] = &DummyAvailabilityZone{name: fmt.Sprintf("zone_%d", i), available: i > 0}
+	}
+	return availabilityZones, nil
+}
+
+func (e *environ) InstanceTypes() ([]instances.InstanceType, error) {
+	supportedArchitectures, err := e.SupportedArchitectures()
+	if err != nil {
+		return nil, err
+	}
+
+	return []instances.InstanceType{
+		instances.InstanceType{
+			Name:     "test-name",
+			Id:       "test-id",
+			Mem:      1024,
+			RootDisk: 8096,
+			CpuCores: 1,
+			Arches:   supportedArchitectures,
+		},
+	}, nil
 }
 
 // SupportedArchitectures is specified on the EnvironCapability interface.

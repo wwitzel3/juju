@@ -668,6 +668,14 @@ type EnvironmentUnset struct {
 	Keys []string
 }
 
+// EnvironmentCapabilities contains the result of Environment.GetCapabilities
+// client API call.
+type EnvironmentCapabilitiesResult struct {
+	AvailabilityZones      []map[string]interface{}
+	InstanceTypes          []map[string]interface{}
+	SupportedArchitectures []string
+}
+
 // SetEnvironAgentVersion contains the arguments for
 // SetEnvironAgentVersion client API call.
 type SetEnvironAgentVersion struct {

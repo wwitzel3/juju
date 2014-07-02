@@ -4,7 +4,11 @@
 package environment
 
 import (
+	"fmt"
+	"github.com/juju/juju/environs"
+	providerCommon "github.com/juju/juju/provider/common"
 	"github.com/juju/juju/state"
+	"github.com/juju/juju/state/api/params"
 	"github.com/juju/juju/state/apiserver/common"
 )
 
@@ -15,6 +19,7 @@ func init() {
 // EnvironmentAPI implements the API used by the machine environment worker.
 type EnvironmentAPI struct {
 	*common.EnvironWatcher
+	st *state.State
 }
 
 // NewEnvironmentAPI creates a new instance of the Environment API.
@@ -25,5 +30,32 @@ func NewEnvironmentAPI(st *state.State, resources *common.Resources, authorizer 
 	getCanReadSecrets := common.AuthAlways(false)
 	return &EnvironmentAPI{
 		EnvironWatcher: common.NewEnvironWatcher(st, resources, getCanWatch, getCanReadSecrets),
+		st:             st,
 	}, nil
+}
+
+func (api *EnvironmentAPI) GetCapabilities() (params.EnvironmentCapabilitiesResult, error) {
+	emptyEnvironmentCapabilities := params.EnvironmentCapabilitiesResult{}
+
+	environConfig, err := api.st.EnvironConfig()
+	if err != nil {
+		return emptyEnvironmentCapabilities, err
+	}
+
+	environment, err := environs.New(environConfig)
+	if err != nil {
+		return emptyEnvironmentCapabilities, err
+	}
+
+	capabilityer, ok := environment.(providerCommon.EnvironCapability)
+	if !ok {
+		return emptyEnvironmentCapabilities, fmt.Errorf("environment does not implement the correct interface: %v", ok)
+	}
+
+	environCapabilities, err := providerCommon.NewEnvironCapabilities(capabilityer)
+	if err != nil {
+		return emptyEnvironmentCapabilities, err
+	}
+
+	return environCapabilities.Result(), nil
 }

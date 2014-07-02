@@ -52,3 +52,34 @@ func (s *environmentSuite) SetUpTest(c *gc.C) {
 	s.EnvironWatcherTest = commontesting.NewEnvironWatcherTest(
 		s.api, s.State, s.resources, commontesting.NoSecrets)
 }
+
+func (s *environmentSuite) TestNewEnvironmentAPIAcceptsClient(c *gc.C) {
+	endPoint, err := environment.NewEnvironmentAPI(s.State, s.resources, s.authorizer)
+	c.Assert(err, gc.IsNil)
+	c.Assert(endPoint, gc.NotNil)
+}
+
+func (s *environmentSuite) TestNewEnvironmentAPIAcceptsEnvironManager(c *gc.C) {
+	anAuthoriser := s.authorizer
+	anAuthoriser.EnvironManager = true
+	endPoint, err := environment.NewEnvironmentAPI(s.State, s.resources, anAuthoriser)
+	c.Assert(err, gc.IsNil)
+	c.Assert(endPoint, gc.NotNil)
+}
+
+func (s *environmentSuite) TestNewEnvironmentAPIAcceptNonClient(c *gc.C) {
+	anAuthoriser := s.authorizer
+	anAuthoriser.Client = false
+	endPoint, err := environment.NewEnvironmentAPI(s.State, s.resources, anAuthoriser)
+	c.Assert(err, gc.IsNil)
+	c.Assert(endPoint, gc.NotNil)
+}
+
+func (s *environmentSuite) TestNewEnvironmentAPIAcceptsNonEnvironManager(c *gc.C) {
+	anAuthoriser := s.authorizer
+	anAuthoriser.Client = false
+	anAuthoriser.MachineAgent = true
+	endPoint, err := environment.NewEnvironmentAPI(s.State, s.resources, anAuthoriser)
+	c.Assert(endPoint, gc.NotNil)
+	c.Assert(err, gc.IsNil)
+}
