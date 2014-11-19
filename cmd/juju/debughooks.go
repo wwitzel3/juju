@@ -11,6 +11,7 @@ import (
 	"github.com/juju/cmd"
 	"github.com/juju/names"
 	"gopkg.in/juju/charm.v4/hooks"
+	"launchpad.net/gnuflag"
 
 	unitdebug "github.com/juju/juju/worker/uniter/context/debug"
 )
@@ -19,6 +20,7 @@ import (
 type DebugHooksCommand struct {
 	SSHCommand
 	hooks []string
+	Retry bool
 }
 
 const debugHooksDoc = `
@@ -32,6 +34,12 @@ func (c *DebugHooksCommand) Info() *cmd.Info {
 		Purpose: "launch a tmux session to debug a hook",
 		Doc:     debugHooksDoc,
 	}
+}
+
+func (c *DebugHooksCommand) SetFlags(f *gnuflag.FlagSet) {
+	f.BoolVar(&c.Retry, "r", false, "marks unit errors resolved and re-execute failed hooks")
+	f.BoolVar(&c.Retry, "retry", false, "")
+	c.SSHCommand.SetFlags(f)
 }
 
 func (c *DebugHooksCommand) Init(args []string) error {
@@ -107,5 +115,35 @@ func (c *DebugHooksCommand) Run(ctx *cmd.Context) error {
 	innercmd := fmt.Sprintf(`F=$(mktemp); echo %s | base64 -d > $F; . $F`, script)
 	args := []string{fmt.Sprintf("sudo /bin/bash -c '%s'", innercmd)}
 	c.Args = args
-	return c.SSHCommand.Run(ctx)
+
+	cSSH := make(chan error)
+	go func() {
+		cSSH <- c.SSHCommand.Run(ctx)
+	}()
+
+	cResolved := make(chan error)
+	if c.Retry {
+		go func() {
+			client, err := c.NewAPIClient()
+			if err != nil {
+				cResolved <- err
+				client.Close()
+			} else {
+				cResolved <- client.Resolved(c.Target, c.Retry)
+			}
+		}()
+	}
+
+	select {
+	case r1 := <-cSSH:
+		if r1 != nil {
+			return r1
+		}
+	case r2 := <-cResolved:
+		if r2 != nil {
+			return r2
+		}
+	}
+
+	return nil
 }
