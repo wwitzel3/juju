@@ -13,6 +13,8 @@ import (
 
 	"github.com/juju/errors"
 	"gopkg.in/mgo.v2"
+
+	"github.com/juju/juju/service"
 )
 
 // AdminUser is the name of the user that is initially created in mongo.
@@ -43,7 +45,7 @@ type services interface {
 }
 
 var newServices = func(dataDir string) (services, error) {
-	return &upstartServices{}, nil
+	return service.DiscoverServices(dataDir)
 }
 
 // EnsureAdminUser ensures that the specified user and password
