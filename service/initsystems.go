@@ -10,6 +10,7 @@ import (
 	"github.com/juju/errors"
 
 	"github.com/juju/juju/service/initsystems"
+	"github.com/juju/juju/service/initsystems/systemd"
 	"github.com/juju/juju/service/initsystems/upstart"
 	"github.com/juju/juju/service/initsystems/windows"
 	"github.com/juju/juju/version"
@@ -19,13 +20,13 @@ import (
 const (
 	InitSystemWindows = "windows"
 	InitSystemUpstart = "upstart"
-	//InitSystemSystemd = "systemd"
+	InitSystemSystemd = "systemd"
 )
 
 var (
 	linuxInitNames = map[string]string{
-		"/sbin/init": InitSystemUpstart,
-		//"/sbin/systemd": InitSystemSystemd,
+		"/sbin/init":    InitSystemUpstart,
+		"/sbin/systemd": InitSystemSystemd,
 	}
 )
 
@@ -35,6 +36,8 @@ func newInitSystem(name string) initsystems.InitSystem {
 		return windows.NewInitSystem(name)
 	case InitSystemUpstart:
 		return upstart.NewInitSystem(name)
+	case InitSystemSystemd:
+		return systemd.NewInitSystem(name)
 	}
 	return nil
 }
