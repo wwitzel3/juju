@@ -48,54 +48,32 @@ func (is *windows) List(include ...string) ([]string, error) {
 
 // Start implements service/initsystems.InitSystem.
 func (is *windows) Start(name string) error {
-	if err := initsystems.EnsureEnabled(name, is); err != nil {
+	if err := initsystems.EnsureStatus(is, name, initsystems.StatusStopped); err != nil {
 		return errors.Trace(err)
-	}
-
-	// Fail if already running.
-	status, err := is.status(name)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	if status == initsystems.StatusRunning {
-		return errors.AlreadyExistsf("service %q", name)
 	}
 
 	// Send the start request.
 	cmd := fmt.Sprintf(`$ErrorActionPreference="Stop"; Start-Service  "%s"`, name)
-	_, err = is.cmd.RunCommandStr(cmd)
+	_, err := is.cmd.RunCommandStr(cmd)
 	return err
 }
 
 // Stop implements service/initsystems.InitSystem.
 func (is *windows) Stop(name string) error {
-	if err := initsystems.EnsureEnabled(name, is); err != nil {
+	if err := initsystems.EnsureStatus(is, name, initsystems.StatusRunning); err != nil {
 		return errors.Trace(err)
-	}
-
-	// Fail if not running.
-	status, err := is.status(name)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	if status != initsystems.StatusRunning {
-		return errors.NotFoundf("service %q", name)
 	}
 
 	// Send the stop request.
 	cmd := fmt.Sprintf(`$ErrorActionPreference="Stop"; Stop-Service  "%s"`, name)
-	_, err = is.cmd.RunCommandStr(cmd)
+	_, err := is.cmd.RunCommandStr(cmd)
 	return err
 }
 
 // Enable implements service/initsystems.InitSystem.
 func (is *windows) Enable(name, filename string) error {
-	enabled, err := is.IsEnabled(name)
-	if err != nil {
+	if err := initsystems.EnsureStatus(is, name, initsystems.StatusDisabled); err != nil {
 		return errors.Trace(err)
-	}
-	if enabled {
-		return errors.AlreadyExistsf("service %q", name)
 	}
 
 	data, err := is.fops.ReadFile(filename)
@@ -119,7 +97,7 @@ func (is *windows) Enable(name, filename string) error {
 
 // Disable implements service/initsystems.InitSystem.
 func (is *windows) Disable(name string) error {
-	if err := initsystems.EnsureEnabled(name, is); err != nil {
+	if err := initsystems.EnsureStatus(is, name, initsystems.StatusEnabled); err != nil {
 		return errors.Trace(err)
 	}
 
@@ -190,7 +168,7 @@ func (is *windows) status(name string) (string, error) {
 
 // Conf implements service/initsystems.InitSystem.
 func (is *windows) Conf(name string) (*initsystems.Conf, error) {
-	if err := initsystems.EnsureEnabled(name, is); err != nil {
+	if err := initsystems.EnsureStatus(is, name, initsystems.StatusEnabled); err != nil {
 		return nil, errors.Trace(err)
 	}
 

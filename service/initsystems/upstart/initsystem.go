@@ -75,7 +75,7 @@ func (is *upstart) List(include ...string) ([]string, error) {
 
 // Start implements initsystems.InitSystem.
 func (is *upstart) Start(name string) error {
-	if err := initsystems.EnsureEnabled(name, is); err != nil {
+	if err := initsystems.EnsureStatus(is, name, initsystems.StatusStopped); err != nil {
 		return errors.Trace(err)
 	}
 
@@ -108,7 +108,7 @@ func (is *upstart) start(name string) error {
 
 // Stop implements initsystems.InitSystem.
 func (is *upstart) Stop(name string) error {
-	if err := initsystems.EnsureEnabled(name, is); err != nil {
+	if err := initsystems.EnsureStatus(is, name, initsystems.StatusRunning); err != nil {
 		return errors.Trace(err)
 	}
 
@@ -123,22 +123,17 @@ func (is *upstart) Stop(name string) error {
 // Enable implements initsystems.InitSystem.
 func (is *upstart) Enable(name, filename string) error {
 	// TODO(ericsnow) Deserialize and validate?
-
-	enabled, err := is.IsEnabled(name)
-	if err != nil {
+	if err := initsystems.EnsureStatus(is, name, initsystems.StatusDisabled); err != nil {
 		return errors.Trace(err)
 	}
-	if enabled {
-		return errors.AlreadyExistsf("service %q", name)
-	}
 
-	err = is.fops.Symlink(filename, is.confPath(name))
+	err := is.fops.Symlink(filename, is.confPath(name))
 	return errors.Trace(err)
 }
 
 // Disable implements initsystems.InitSystem.
 func (is *upstart) Disable(name string) error {
-	if err := initsystems.EnsureEnabled(name, is); err != nil {
+	if err := initsystems.EnsureStatus(is, name, initsystems.StatusEnabled); err != nil {
 		return errors.Trace(err)
 	}
 
@@ -168,7 +163,7 @@ func (is *upstart) IsEnabled(name string) (bool, error) {
 
 // Info implements initsystems.InitSystem.
 func (is *upstart) Info(name string) (*initsystems.ServiceInfo, error) {
-	if err := initsystems.EnsureEnabled(name, is); err != nil {
+	if err := initsystems.EnsureStatus(is, name, initsystems.StatusEnabled); err != nil {
 		return nil, errors.Trace(err)
 	}
 
