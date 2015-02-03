@@ -163,8 +163,9 @@ func (is *upstart) IsEnabled(name string) (bool, error) {
 
 // Info implements initsystems.InitSystem.
 func (is *upstart) Info(name string) (*initsystems.ServiceInfo, error) {
-	if err := initsystems.EnsureStatus(is, name, initsystems.StatusEnabled); err != nil {
-		return nil, errors.Trace(err)
+	enabled, err := is.IsEnabled(name)
+	if !enabled {
+		return nil, errors.NotFoundf("service %q", name)
 	}
 
 	conf, err := is.Conf(name)
