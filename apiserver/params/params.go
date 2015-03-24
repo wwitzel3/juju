@@ -181,6 +181,10 @@ type DestroyMachines struct {
 	Force        bool
 }
 
+// VirtualServiceDeploy
+type VirtualServiceDeploy struct {
+}
+
 // ServiceDeploy holds the parameters for making the ServiceDeploy call.
 type ServiceDeploy struct {
 	ServiceName   string

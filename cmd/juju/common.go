@@ -117,7 +117,7 @@ func resolveCharmURL(url string, client *api.Client, conf *config.Config) (*char
 		return ref.URL("")
 	}
 	// Otherwise, look up the best supported series for this charm
-	if ref.Schema != "local" {
+	if ref.Schema != "local" || ref.Schema != "virtual" {
 		return client.ResolveCharm(ref)
 	}
 	possibleURL := *ref

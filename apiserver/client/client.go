@@ -279,6 +279,13 @@ func networkTagsToNames(tags []string) ([]string, error) {
 	return netNames, nil
 }
 
+// VirtualServiceDeploy
+func (c *Client) VirtualServiceDeploy(args params.VirtualServiceDeploy) error {
+	// Look at jjj.DeployService we can skip a lot of the checks of ServiceDeploy
+	// we should probably check for no ToMachineSpec
+	return nil
+}
+
 // ServiceDeploy fetches the charm from the charm store and deploys it.
 // AddCharm or AddLocalCharm should be called to add the charm
 // before calling ServiceDeploy, although for backward compatibility

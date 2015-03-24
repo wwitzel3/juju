@@ -50,6 +50,10 @@ type CharmURLs struct {
 	URLs []CharmURL
 }
 
+type VirtualService struct {
+	JSON string
+}
+
 // StringsResult holds the result of an API call that returns a slice
 // of strings or an error.
 type StringsResult struct {

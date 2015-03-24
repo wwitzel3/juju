@@ -30,6 +30,7 @@ type DeployCommand struct {
 	envcmd.EnvCommandBase
 	UnitCommandBase
 	CharmName    string
+	CharmRef     *charm.Reference
 	ServiceName  string
 	Config       cmd.FileVar
 	Constraints  constraints.Value
@@ -43,6 +44,9 @@ type DeployCommand struct {
 	// Storage is a map of storage constraints, keyed on the storage name
 	// defined in charm storage metadata.
 	Storage map[string]storage.Constraints
+
+	// VirtualEndpoints
+	VirtualEndpoints string
 }
 
 const deployDoc = `
@@ -143,9 +147,11 @@ func (c *DeployCommand) SetFlags(f *gnuflag.FlagSet) {
 		// version supports storage, and error if it doesn't.
 		f.Var(storageFlag{&c.Storage}, "storage", "charm storage constraints")
 	}
+	f.StringVar(&c.VirtualEndpoints, "endpoints", "", "json that defines the interface(s) for the virtual service")
 }
 
 func (c *DeployCommand) Init(args []string) error {
+	var err error
 	switch len(args) {
 	case 2:
 		if !names.IsValidService(args[1]) {
@@ -154,8 +160,28 @@ func (c *DeployCommand) Init(args []string) error {
 		c.ServiceName = args[1]
 		fallthrough
 	case 1:
-		if _, err := charm.InferURL(args[0], "fake"); err != nil {
-			return fmt.Errorf("invalid charm name %q", args[0])
+		c.CharmRef, err = charm.ParseReference(args[0])
+		if err != nil {
+			return err
+		}
+
+		if c.CharmRef.Schema == "virtual" {
+			if c.VirtualEndpoints == "" {
+				return fmt.Errorf("virtual charm type requires --endpoints")
+			}
+			if c.NumUnits > 1 {
+				return fmt.Errorf("virtual charm type does not support multiple principal units")
+			}
+		}
+
+		if c.CharmRef.Schema != "virtual" && c.VirtualEndpoints != "" {
+			return fmt.Errorf("using --endpoints requires the virtual charm type")
+		}
+
+		if c.CharmRef.Schema != "virtual" {
+			if _, err := charm.InferURL(args[0], "fake"); err != nil {
+				return fmt.Errorf("invalid charm name %q", args[0])
+			}
 		}
 		c.CharmName = args[0]
 	case 0:
@@ -180,6 +206,11 @@ func (c *DeployCommand) Run(ctx *cmd.Context) error {
 
 	if err := c.checkProvider(conf); err != nil {
 		return err
+	}
+
+	if c.CharmRef.Schema == "virtual" {
+		addVirtualServiceViaAPI(client, c.CharmRef, c.VirtualEndpoints)
+		return block.ProcessBlockedError(err, block.BlockChange)
 	}
 
 	curl, err := resolveCharmURL(c.CharmName, client, conf)
@@ -271,6 +302,14 @@ func (c *DeployCommand) Run(ctx *cmd.Context) error {
 			c.ToMachineSpec)
 	}
 	return block.ProcessBlockedError(err, block.BlockChange)
+}
+
+// addVirtualServiceViaAPI
+func addVirtualServiceViaAPI(client *api.Client, ref *charm.Reference, endpoints string) error {
+	if err := client.VirtualServiceDeploy(); err != nil {
+		return err
+	}
+	return nil
 }
 
 // addCharmViaAPI calls the appropriate client API calls to add the

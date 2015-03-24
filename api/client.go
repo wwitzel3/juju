@@ -371,6 +371,13 @@ func (c *Client) ServiceDeployWithNetworks(
 	return c.facade.FacadeCall("ServiceDeployWithNetworks", params, nil)
 }
 
+// VirtualServiceDeploy uses the endpoints provided by the user
+// and deploys a virtual services that will provide those endpoints.
+func (c *Client) VirtualServiceDeploy() error {
+	params := params.VirtualServiceDeploy{}
+	return c.facade.FacadeCall("VirtualServiceDeploy", params, nil)
+}
+
 // ServiceDeploy obtains the charm, either locally or from the charm store,
 // and deploys it.
 func (c *Client) ServiceDeploy(charmURL string, serviceName string, numUnits int, configYAML string, cons constraints.Value, toMachineSpec string) error {
@@ -788,6 +795,17 @@ func (c *Client) AddLocalCharm(curl *charm.URL, ch charm.Charm) (*charm.URL, err
 func (c *Client) AddCharm(curl *charm.URL) error {
 	args := params.CharmURL{URL: curl.String()}
 	return c.facade.FacadeCall("AddCharm", args, nil)
+}
+
+// AddVirtualService adds a virtual service to the environment. The
+// virtual service will set the provides interfaces and relation data based on
+// the user provided JSON.
+func (c *Client) AddVirtualService(curl *charm.URL, json string) error {
+	args := params.VirtualService{
+		JSON: json,
+	}
+	return c.facade.FacadeCall("AddVirtualService", args, nil)
+
 }
 
 // ResolveCharm resolves the best available charm URLs with series, for charm
