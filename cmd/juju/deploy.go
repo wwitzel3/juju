@@ -6,6 +6,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"strings"
 
@@ -148,7 +149,7 @@ func (c *DeployCommand) SetFlags(f *gnuflag.FlagSet) {
 		// version supports storage, and error if it doesn't.
 		f.Var(storageFlag{&c.Storage}, "storage", "charm storage constraints")
 	}
-	f.StringVar(&c.VirtualEndpoints, "endpoint", "", "json that defines the interface(s) for the virtual service")
+	f.StringVar(&c.VirtualEndpoints, "endpoint-file", "", "file that defines the interface(s) for the virtual service")
 }
 
 func (c *DeployCommand) Init(args []string) error {
@@ -168,7 +169,7 @@ func (c *DeployCommand) Init(args []string) error {
 
 		if c.CharmRef.Schema == "virtual" {
 			if c.VirtualEndpoints == "" {
-				return fmt.Errorf("virtual charm type requires --endpoints")
+				return fmt.Errorf("virtual charm type requires --endpoint-file")
 			}
 			if c.NumUnits > 1 {
 				return fmt.Errorf("virtual charm type does not support multiple principal units")
@@ -176,7 +177,7 @@ func (c *DeployCommand) Init(args []string) error {
 		}
 
 		if c.CharmRef.Schema != "virtual" && c.VirtualEndpoints != "" {
-			return fmt.Errorf("using --endpoints requires the virtual charm type")
+			return fmt.Errorf("using --endpoint-file requires the virtual charm type")
 		}
 
 		if c.CharmRef.Schema != "virtual" {
@@ -381,33 +382,40 @@ func networkNamesToTags(networks []string) ([]string, error) {
 }
 
 func parseVirtualEndpoints(endpointArg string) ([]params.VirtualEndpoint, error) {
+	fdata, err := ioutil.ReadFile(endpointArg)
+	if err != nil {
+		return nil, err
+	}
+
+	data := string(fdata)
 	var virtEndpoints []params.VirtualEndpoint
 	var endpoint params.VirtualEndpoint
 
-	relation_index := strings.Index(endpointArg, ":")
+	relation_index := strings.Index(data, ":")
 	if relation_index == -1 {
-		return virtEndpoints, errors.Errorf("no relation index found in %q", endpointArg)
+		return virtEndpoints, errors.Errorf("no relation index found in %q", data)
 	}
 
-	endpoint.Relation = strings.TrimSpace(endpointArg[:relation_index])
+	endpoint.Relation = strings.TrimSpace(data[:relation_index])
 	if endpoint.Relation == "" {
-		return virtEndpoints, errors.Errorf("no relation name found in %q", endpointArg)
+		return virtEndpoints, errors.Errorf("no relation name found in %q", data)
 	}
 
-	interface_index := strings.Index(endpointArg, "=")
+	interface_index := strings.Index(data, "=")
 	if interface_index == -1 {
-		return virtEndpoints, errors.Errorf("no interface name found in %q", endpointArg)
+		return virtEndpoints, errors.Errorf("no interface name found in %q", data)
 	}
 
-	endpoint.Interface = strings.TrimSpace(endpointArg[relation_index+1 : interface_index])
+	endpoint.Interface = strings.TrimSpace(data[relation_index+1 : interface_index])
 	if endpoint.Interface == "" {
-		return virtEndpoints, errors.Errorf("no interface name found in %q", endpointArg)
+		return virtEndpoints, errors.Errorf("no interface name found in %q", data)
 	}
 
-	json_data := strings.TrimSpace(endpointArg[interface_index+1:])
+	json_data := strings.TrimSpace(data[interface_index+1:])
 	if err := json.Unmarshal([]byte(json_data), &endpoint.Payload); err != nil {
 		return virtEndpoints, errors.Errorf("invalid JSON: %+v", json_data)
 	}
 	vp := []params.VirtualEndpoint{endpoint}
+	logger.Debugf("%#v", vp)
 	return vp, nil
 }
