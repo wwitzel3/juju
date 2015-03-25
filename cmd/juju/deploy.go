@@ -209,7 +209,7 @@ func (c *DeployCommand) Run(ctx *cmd.Context) error {
 	}
 
 	if c.CharmRef.Schema == "virtual" {
-		addVirtualServiceViaAPI(client, c.CharmRef, c.VirtualEndpoints)
+		err := addVirtualServiceViaAPI(client, c.CharmRef, c.VirtualEndpoints)
 		return block.ProcessBlockedError(err, block.BlockChange)
 	}
 
@@ -306,7 +306,7 @@ func (c *DeployCommand) Run(ctx *cmd.Context) error {
 
 // addVirtualServiceViaAPI
 func addVirtualServiceViaAPI(client *api.Client, ref *charm.Reference, endpoints string) error {
-	if err := client.VirtualServiceDeploy(); err != nil {
+	if err := client.VirtualServiceDeploy(ref.Name, endpoints); err != nil {
 		return err
 	}
 	return nil

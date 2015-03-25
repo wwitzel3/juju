@@ -283,17 +283,25 @@ func networkTagsToNames(tags []string) ([]string, error) {
 func (c *Client) VirtualServiceDeploy(args params.VirtualServiceDeploy) error {
 	vcharm := NewVirtualCharm(args)
 
-	url := "virtual:" + args.ServiceName
+	url := "virtual:trusty/" + args.ServiceName
 	curl := charm.MustParseURL(url)
-	stch, err := c.api.state.AddCharm(vcharm, curl, "", "virtual")
+	stch, err := c.api.state.Charm(curl)
+	if err != nil {
+		stch, err = c.api.state.AddCharm(vcharm, curl, "", "virtual")
+	}
 
+	if err != nil {
+		return err
+	}
+
+	env, err := c.api.state.Environment()
 	if err != nil {
 		return err
 	}
 
 	_, err = c.api.state.AddService(
 		args.ServiceName,
-		"juju",
+		env.Owner().String(),
 		stch,
 		nil,
 		nil,
