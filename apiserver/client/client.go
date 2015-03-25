@@ -281,9 +281,89 @@ func networkTagsToNames(tags []string) ([]string, error) {
 
 // VirtualServiceDeploy
 func (c *Client) VirtualServiceDeploy(args params.VirtualServiceDeploy) error {
-	// Look at jjj.DeployService we can skip a lot of the checks of ServiceDeploy
-	// we should probably check for no ToMachineSpec
+	vcharm := NewVirtualCharm(args)
+
+	url := "virtual:" + args.ServiceName
+	curl := charm.MustParseURL(url)
+	stch, err := c.api.state.AddCharm(vcharm, curl, "", "virtual")
+
+	if err != nil {
+		return err
+	}
+
+	_, err = c.api.state.AddService(
+		args.ServiceName,
+		"juju",
+		stch,
+		nil,
+		nil,
+	)
+
+	if err != nil {
+		return err
+	}
 	return nil
+}
+
+// MakeVirtualRelations create relations map from virtual endpoints
+func makeVirtualRelations(endpoints []params.VirtualEndpoint) map[string]charm.Relation {
+	var relations = make(map[string]charm.Relation)
+	for _, endpoint := range endpoints {
+		relation := charm.Relation{
+			Name:      endpoint.Relation,
+			Role:      "tight",
+			Interface: endpoint.Interface,
+		}
+		relations[endpoint.Relation] = relation
+	}
+	return relations
+}
+
+type VirtualCharm struct {
+	meta *charm.Meta
+}
+
+var _ charm.Charm = (*VirtualCharm)(nil)
+
+func NewVirtualCharm(args params.VirtualServiceDeploy) VirtualCharm {
+	endpoints := makeVirtualRelations(args.Endpoints)
+	meta := &charm.Meta{
+		args.ServiceName,
+		"",
+		"",
+		false,
+		endpoints,
+		nil,
+		nil,
+		0,
+		0,
+		nil,
+		nil,
+		"virtual",
+		nil,
+	}
+	vcharm := VirtualCharm{meta}
+	return vcharm
+}
+
+func (vc VirtualCharm) Meta() *charm.Meta {
+	return vc.meta
+}
+
+func (VirtualCharm) Actions() *charm.Actions {
+	return nil
+}
+
+func (VirtualCharm) Config() *charm.Config {
+	return nil
+}
+
+func (VirtualCharm) Metrics() *charm.Metrics {
+	return nil
+}
+
+func (VirtualCharm) Revision() int {
+	return 0
 }
 
 // ServiceDeploy fetches the charm from the charm store and deploys it.

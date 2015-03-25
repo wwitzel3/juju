@@ -181,8 +181,17 @@ type DestroyMachines struct {
 	Force        bool
 }
 
+// VirtualEndpoint
+type VirtualEndpoint struct {
+	Relation  string
+	Interface string
+	Payload   map[string]interface{}
+}
+
 // VirtualServiceDeploy
 type VirtualServiceDeploy struct {
+	ServiceName string
+	Endpoints   []VirtualEndpoint
 }
 
 // ServiceDeploy holds the parameters for making the ServiceDeploy call.
