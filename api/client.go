@@ -373,9 +373,9 @@ func (c *Client) ServiceDeployWithNetworks(
 
 // VirtualServiceDeploy uses the endpoints provided by the user
 // and deploys a virtual services that will provide those endpoints.
-func (c *Client) VirtualServiceDeploy(serviceName string, endpoints string) error {
-	params := params.VirtualServiceDeploy{serviceName, nil}
-	return c.facade.FacadeCall("VirtualServiceDeploy", params, nil)
+func (c *Client) VirtualServiceDeploy(serviceName string, endpoints []params.VirtualEndpoint) error {
+	args := params.VirtualServiceDeploy{serviceName, endpoints}
+	return c.facade.FacadeCall("VirtualServiceDeploy", args, nil)
 }
 
 // ServiceDeploy obtains the charm, either locally or from the charm store,

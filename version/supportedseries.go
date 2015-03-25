@@ -57,6 +57,7 @@ var seriesVersions = map[string]string{
 	"win8":        "win8",
 	"win81":       "win81",
 	"centos7":     "7",
+	"virtual":     "unknown",
 }
 
 var centosSeries = map[string]string{

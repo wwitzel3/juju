@@ -4,6 +4,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -147,7 +148,7 @@ func (c *DeployCommand) SetFlags(f *gnuflag.FlagSet) {
 		// version supports storage, and error if it doesn't.
 		f.Var(storageFlag{&c.Storage}, "storage", "charm storage constraints")
 	}
-	f.StringVar(&c.VirtualEndpoints, "endpoints", "", "json that defines the interface(s) for the virtual service")
+	f.StringVar(&c.VirtualEndpoints, "endpoint", "", "json that defines the interface(s) for the virtual service")
 }
 
 func (c *DeployCommand) Init(args []string) error {
@@ -306,7 +307,12 @@ func (c *DeployCommand) Run(ctx *cmd.Context) error {
 
 // addVirtualServiceViaAPI
 func addVirtualServiceViaAPI(client *api.Client, ref *charm.Reference, endpoints string) error {
-	if err := client.VirtualServiceDeploy(ref.Name, endpoints); err != nil {
+	virtEndpoints, err := parseVirtualEndpoints(endpoints)
+	if err != nil {
+		return err
+	}
+
+	if err := client.VirtualServiceDeploy(ref.Name, virtEndpoints); err != nil {
 		return err
 	}
 	return nil
@@ -371,4 +377,37 @@ func networkNamesToTags(networks []string) ([]string, error) {
 		tags = append(tags, names.NewNetworkTag(network).String())
 	}
 	return tags, nil
+
+}
+
+func parseVirtualEndpoints(endpointArg string) ([]params.VirtualEndpoint, error) {
+	var virtEndpoints []params.VirtualEndpoint
+	var endpoint params.VirtualEndpoint
+
+	relation_index := strings.Index(endpointArg, ":")
+	if relation_index == -1 {
+		return virtEndpoints, errors.Errorf("no relation index found in %q", endpointArg)
+	}
+
+	endpoint.Relation = strings.TrimSpace(endpointArg[:relation_index])
+	if endpoint.Relation == "" {
+		return virtEndpoints, errors.Errorf("no relation name found in %q", endpointArg)
+	}
+
+	interface_index := strings.Index(endpointArg, "=")
+	if interface_index == -1 {
+		return virtEndpoints, errors.Errorf("no interface name found in %q", endpointArg)
+	}
+
+	endpoint.Interface = strings.TrimSpace(endpointArg[relation_index+1 : interface_index])
+	if endpoint.Interface == "" {
+		return virtEndpoints, errors.Errorf("no interface name found in %q", endpointArg)
+	}
+
+	json_data := strings.TrimSpace(endpointArg[interface_index+1:])
+	if err := json.Unmarshal([]byte(json_data), &endpoint.Payload); err != nil {
+		return virtEndpoints, errors.Errorf("invalid JSON: %+v", json_data)
+	}
+	vp := []params.VirtualEndpoint{endpoint}
+	return vp, nil
 }
