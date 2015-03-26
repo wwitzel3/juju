@@ -46,6 +46,7 @@ type serviceDoc struct {
 	OwnerTag          string     `bson:"ownertag"`
 	TxnRevno          int64      `bson:"txn-revno"`
 	MetricCredentials []byte     `bson:"metric-credentials"`
+	IsVirtual         bool       `bson:"is-virtual"`
 }
 
 func newService(st *State, doc *serviceDoc) *Service {
@@ -299,6 +300,7 @@ func (s *Service) Endpoints() (eps []Endpoint, err error) {
 			eps = append(eps, Endpoint{
 				ServiceName: s.doc.Name,
 				Relation:    rel,
+				IsVirtual:   s.doc.IsVirtual,
 			})
 		}
 	}
@@ -440,7 +442,7 @@ func (s *Service) changeCharmOps(ch *Charm, force bool) ([]txn.Op, error) {
 	}...)
 	// Add any extra peer relations that need creation.
 	newPeers := s.extraPeerRelations(ch.Meta())
-	peerOps, err := s.st.addPeerRelationsOps(s.doc.Name, newPeers)
+	peerOps, err := s.st.addPeerRelationsOps(s.doc.Name, newPeers, false)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -573,7 +575,7 @@ func (s *Service) newUnitName() (string, error) {
 // and only if s is a subordinate service. Only one subordinate of a given
 // service will be assigned to a given principal. The asserts param can be used
 // to include additional assertions for the service document.
-func (s *Service) addUnitOps(principalName string, asserts bson.D) (string, []txn.Op, error) {
+func (s *Service) addUnitOps(principalName string, virtual bool, asserts bson.D) (string, []txn.Op, error) {
 	if s.doc.Subordinate && principalName == "" {
 		return "", nil, fmt.Errorf("service is a subordinate")
 	} else if !s.doc.Subordinate && principalName != "" {
@@ -602,6 +604,7 @@ func (s *Service) addUnitOps(principalName string, asserts bson.D) (string, []tx
 		Life:                   Alive,
 		Principal:              principalName,
 		StorageAttachmentCount: numStorageAttachments,
+		Virtual:                virtual,
 	}
 	agentStatusDoc := statusDoc{
 		Status:  StatusAllocating,
@@ -688,10 +691,19 @@ func (s *Service) GetOwnerTag() string {
 	return owner
 }
 
-// AddUnit adds a new principal unit to the service.
+func (s *Service) AddVirtualUnit() (unit *Unit, err error) {
+	logger.Debugf("adding virtual unit")
+	return s.addUnit(true)
+}
+
 func (s *Service) AddUnit() (unit *Unit, err error) {
+	return s.addUnit(false)
+}
+
+// AddUnit adds a new principal unit to the service.
+func (s *Service) addUnit(virtual bool) (unit *Unit, err error) {
 	defer errors.DeferredAnnotatef(&err, "cannot add unit to service %q", s)
-	name, ops, err := s.addUnitOps("", nil)
+	name, ops, err := s.addUnitOps("", virtual, nil)
 	if err != nil {
 		return nil, err
 	}

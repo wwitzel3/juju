@@ -20,7 +20,7 @@ func (c *Client) VirtualServiceDeploy(args params.VirtualServiceDeploy) error {
 	curl := charm.MustParseURL(url)
 	stch, err := c.api.state.Charm(curl)
 	if err != nil {
-		stch, err = c.api.state.AddCharm(vcharm, curl, "", "virtual")
+		stch, err = c.api.state.AddCharm(vcharm, curl, "", "global")
 	}
 
 	if err != nil {
@@ -32,20 +32,28 @@ func (c *Client) VirtualServiceDeploy(args params.VirtualServiceDeploy) error {
 		return err
 	}
 
-	_, err = c.api.state.AddService(
+	service, err := c.api.state.AddVirtualService(
 		args.ServiceName,
 		env.Owner().String(),
 		stch,
-		nil,
-		nil,
 	)
 	if err != nil {
 		return err
 	}
 
-	if err := setVirtualServiceSettings(c.api.state, args.ServiceName, args.Endpoints); err != nil {
+	unit, err := service.AddVirtualUnit()
+	if err != nil {
 		return err
 	}
+
+	if err := setVirtualServiceSettings(c.api.state, unit.Name(), args.Endpoints); err != nil {
+		return err
+	}
+
+	if err := unit.SetAgentStatus(state.StatusActive, "virtual", nil); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -57,16 +65,16 @@ func makeVirtualRelations(endpoints []params.VirtualEndpoint) map[string]charm.R
 			Name:      endpoint.Relation,
 			Role:      "provider",
 			Interface: endpoint.Interface,
-			Scope:     charm.ScopeVirtual,
+			Scope:     charm.ScopeGlobal,
 		}
 		relations[endpoint.Relation] = relation
 	}
 	return relations
 }
 
-func setVirtualServiceSettings(st *state.State, serviceName string, endpoints []params.VirtualEndpoint) error {
+func setVirtualServiceSettings(st *state.State, unitName string, endpoints []params.VirtualEndpoint) error {
 	for _, ep := range endpoints {
-		key := strings.Join([]string{"virtual", "provider", serviceName, ep.Relation, ep.Interface}, "#")
+		key := strings.Join([]string{"global", "provider", unitName, ep.Relation, ep.Interface}, "#")
 		logger.Debugf("%q", key)
 		state.WriteVirtualSettings(st, key, ep.Payload)
 	}
@@ -95,7 +103,7 @@ func NewVirtualCharm(args params.VirtualServiceDeploy) virtualCharm {
 		0,
 		nil,
 		nil,
-		"virtual",
+		"global",
 		nil,
 	}
 	vcharm := virtualCharm{meta}

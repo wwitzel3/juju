@@ -1188,7 +1188,8 @@ func (st *State) updateCharmDoc(
 
 // addPeerRelationsOps returns the operations necessary to add the
 // specified service peer relations to the state.
-func (st *State) addPeerRelationsOps(serviceName string, peers map[string]charm.Relation) ([]txn.Op, error) {
+func (st *State) addPeerRelationsOps(serviceName string, peers map[string]charm.Relation, virtual bool) ([]txn.Op, error) {
+	logger.Debugf("addPeerRelationOps: %q, %#v, %q", serviceName, peers, virtual)
 	var ops []txn.Op
 	for _, rel := range peers {
 		relId, err := st.sequence("relation")
@@ -1198,6 +1199,7 @@ func (st *State) addPeerRelationsOps(serviceName string, peers map[string]charm.
 		eps := []Endpoint{{
 			ServiceName: serviceName,
 			Relation:    rel,
+			IsVirtual:   virtual,
 		}}
 		relKey := relationKey(eps)
 		relDoc := &relationDoc{
@@ -1218,11 +1220,22 @@ func (st *State) addPeerRelationsOps(serviceName string, peers map[string]charm.
 	return ops, nil
 }
 
+func (st *State) AddVirtualService(name, owner string, ch *Charm) (service *Service, err error) {
+	logger.Debugf("adding virtual service")
+	return st.addService(name, owner, ch, nil, nil, true)
+}
+
+func (st *State) AddService(
+	name, owner string, ch *Charm, networks []string, storage map[string]StorageConstraints,
+) (service *Service, err error) {
+	return st.addService(name, owner, ch, networks, storage, false)
+}
+
 // AddService creates a new service, running the supplied charm, with the
 // supplied name (which must be unique). If the charm defines peer relations,
 // they will be created automatically.
-func (st *State) AddService(
-	name, owner string, ch *Charm, networks []string, storage map[string]StorageConstraints,
+func (st *State) addService(
+	name, owner string, ch *Charm, networks []string, storage map[string]StorageConstraints, virtual bool,
 ) (service *Service, err error) {
 	defer errors.DeferredAnnotatef(&err, "cannot add service %q", name)
 	ownerTag, err := names.ParseUserTag(owner)
@@ -1269,6 +1282,7 @@ func (st *State) AddService(
 		RelationCount: len(peers),
 		Life:          Alive,
 		OwnerTag:      owner,
+		IsVirtual:     virtual,
 	}
 	svc := newService(st, svcDoc)
 	ops := []txn.Op{
@@ -1298,7 +1312,7 @@ func (st *State) AddService(
 		},
 	}
 	// Collect peer relation addition operations.
-	peerOps, err := st.addPeerRelationsOps(name, peers)
+	peerOps, err := st.addPeerRelationsOps(name, peers, virtual)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -1636,6 +1650,7 @@ func (st *State) InferEndpoints(names ...string) ([]Endpoint, error) {
 		for _, ep := range eps {
 			candidates = append(candidates, []Endpoint{ep})
 		}
+		logger.Debugf("case 1: %#v", eps)
 	case 2:
 		eps1, err := st.endpoints(names[0], notPeer)
 		if err != nil {
@@ -1652,6 +1667,7 @@ func (st *State) InferEndpoints(names ...string) ([]Endpoint, error) {
 				}
 			}
 		}
+		logger.Debugf("case 2: %#v, %#v", eps1, eps2)
 	default:
 		return nil, errors.Errorf("cannot relate %d endpoints", len(names))
 	}
@@ -1831,6 +1847,7 @@ func (st *State) AddRelation(eps ...Endpoint) (r *Relation, err error) {
 				return nil, errors.Trace(err)
 			}
 		}
+		logger.Debugf("AddRelation eps: %#v", eps)
 		docID := st.docID(key)
 		doc = &relationDoc{
 			DocID:     docID,

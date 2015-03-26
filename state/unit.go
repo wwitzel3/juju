@@ -98,6 +98,7 @@ type unitDoc struct {
 	Life                   Life
 	TxnRevno               int64 `bson:"txn-revno"`
 	PasswordHash           string
+	Virtual                bool
 
 	// TODO(mue) No longer actively used, only in upgrades.go.
 	// To be removed later.
@@ -698,6 +699,14 @@ func (u *Unit) PrincipalName() (string, bool) {
 
 // machine returns the unit's machine.
 func (u *Unit) machine() (*Machine, error) {
+	if u.doc.Virtual == true {
+		ssinfo, err := u.st.StateServerInfo()
+		if err != nil {
+			return nil, err
+		}
+		return u.st.Machine(ssinfo.MachineIds[0])
+	}
+
 	id, err := u.AssignedMachineId()
 	if err != nil {
 		return nil, errors.Annotatef(err, "unit %v cannot get assigned machine", u)
@@ -997,6 +1006,9 @@ func (u *Unit) SetCharmURL(curl *charm.URL) error {
 
 // AgentPresence returns whether the respective remote agent is alive.
 func (u *Unit) AgentPresence() (bool, error) {
+	if u.doc.Virtual == true {
+		return true, nil
+	}
 	return u.st.pwatcher.Alive(u.globalAgentKey())
 }
 

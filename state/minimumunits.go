@@ -195,5 +195,5 @@ func aliveUnitsCount(service *Service) (int, error) {
 // will be aborted if the service document changes when running the operations.
 func ensureMinUnitsOps(service *Service) (string, []txn.Op, error) {
 	asserts := bson.D{{"txn-revno", service.doc.TxnRevno}}
-	return service.addUnitOps("", asserts)
+	return service.addUnitOps("", false, asserts)
 }

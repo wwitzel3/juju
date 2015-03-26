@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/juju/errors"
+	"github.com/juju/loggo"
 	"github.com/juju/names"
 	jujutxn "github.com/juju/txn"
 	"gopkg.in/juju/charm.v4"
@@ -16,6 +17,8 @@ import (
 	"gopkg.in/mgo.v2/bson"
 	"gopkg.in/mgo.v2/txn"
 )
+
+var ruLogger = loggo.GetLogger("juju.state.relationunit")
 
 // RelationUnit holds information about a single unit in a relation, and
 // allows clients to conveniently access unit-specific functionality.
@@ -76,7 +79,7 @@ func (ru *RelationUnit) EnterScope(settings map[string]interface{}) error {
 
 	// Verify that the unit is not already in scope, and abort without error
 	// if it is.
-	ruKey, err := ru.key(ru.unit.Name())
+	ruKey, err := ru.key(ru.unit)
 	if err != nil {
 		return err
 	}
@@ -226,7 +229,7 @@ func (ru *RelationUnit) subordinateOps() ([]txn.Op, string, error) {
 		if err != nil {
 			return nil, "", err
 		}
-		_, ops, err := service.addUnitOps(unitName, nil)
+		_, ops, err := service.addUnitOps(unitName, false, nil)
 		return ops, "", err
 	} else if err != nil {
 		return nil, "", err
@@ -247,7 +250,7 @@ func (ru *RelationUnit) PrepareLeaveScope() error {
 	relationScopes, closer := ru.st.getCollection(relationScopesC)
 	defer closer()
 
-	key, err := ru.key(ru.unit.Name())
+	key, err := ru.key(ru.unit)
 	if err != nil {
 		return err
 	}
@@ -273,7 +276,7 @@ func (ru *RelationUnit) LeaveScope() error {
 	relationScopes, closer := ru.st.getCollection(relationScopesC)
 	defer closer()
 
-	key, err := ru.key(ru.unit.Name())
+	key, err := ru.key(ru.unit)
 	if err != nil {
 		return err
 	}
@@ -366,7 +369,7 @@ func (ru *RelationUnit) inScope(sel bson.D) (bool, error) {
 	relationScopes, closer := ru.st.getCollection(relationScopesC)
 	defer closer()
 
-	key, err := ru.key(ru.unit.Name())
+	key, err := ru.key(ru.unit)
 	if err != nil {
 		return false, err
 	}
@@ -389,7 +392,7 @@ func (ru *RelationUnit) WatchScope() *RelationScopeWatcher {
 // Settings returns a Settings which allows access to the unit's settings
 // within the relation.
 func (ru *RelationUnit) Settings() (*Settings, error) {
-	key, err := ru.key(ru.unit.Name())
+	key, err := ru.key(ru.unit)
 	if err != nil {
 		return nil, err
 	}
@@ -404,23 +407,21 @@ func (ru *RelationUnit) Settings() (*Settings, error) {
 // guaranteed to persist for the lifetime of the relation, regardless
 // of the lifetime of the unit.
 func (ru *RelationUnit) ReadSettings(uname string) (m map[string]interface{}, err error) {
+	ruLogger.Debugf("reading settings...")
+
 	defer errors.DeferredAnnotatef(&err, "cannot read settings for unit %q in relation %q", uname, ru.relation)
 	var key string
 
-	endpoint := hasVirtualEndpoints(ru.Relation().Endpoints())
-	if endpoint != nil {
-		key = strings.Join([]string{"virtual", "provider", endpoint.ServiceName, endpoint.Name, endpoint.Interface}, "#")
-		logger.Debugf("virt: %q", key)
-	} else {
-		if !names.IsValidUnit(uname) {
-			return nil, fmt.Errorf("%q is not a valid unit name", uname)
-		}
-		key, err = ru.key(uname)
-		if err != nil {
-			return nil, err
-		}
+	if !names.IsValidUnit(uname) {
+		return nil, fmt.Errorf("%q is not a valid unit name", uname)
 	}
-	logger.Debugf("%q", key)
+
+	key, err = ru.key(ru.unit)
+	if err != nil {
+		return nil, err
+	}
+
+	ruLogger.Debugf("rukey: %q", key)
 	node, err := readSettings(ru.st, key)
 	if err != nil {
 		return nil, err
@@ -429,8 +430,10 @@ func (ru *RelationUnit) ReadSettings(uname string) (m map[string]interface{}, er
 }
 
 func hasVirtualEndpoints(endpoints []Endpoint) *Endpoint {
+	ruLogger.Debugf("hasEndpoints: %#v", endpoints)
 	for _, ep := range endpoints {
-		if ep.Scope == charm.ScopeVirtual {
+		ruLogger.Debugf("ep: %#v", ep)
+		if ep.IsVirtual == true {
 			return &ep
 		}
 	}
@@ -440,7 +443,13 @@ func hasVirtualEndpoints(endpoints []Endpoint) *Endpoint {
 // key returns a string, based on the relation and the supplied unit name,
 // which is used as a key for that unit within this relation in the settings,
 // presence, and relationScopes collections.
-func (ru *RelationUnit) key(uname string) (string, error) {
+func (ru *RelationUnit) key(unit *Unit) (string, error) {
+	uname := unit.Name()
+
+	if ep := hasVirtualEndpoints(ru.Relation().Endpoints()); ep != nil {
+		return strings.Join([]string{"global", "provider", uname, ep.Name, ep.Interface}, "#"), nil
+	}
+
 	uparts := strings.Split(uname, "/")
 	sname := uparts[0]
 	ep, err := ru.relation.Endpoint(sname)
