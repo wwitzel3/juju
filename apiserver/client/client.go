@@ -618,6 +618,8 @@ func (c *Client) DestroyServiceUnits(args params.DestroyServiceUnits) error {
 		case errors.IsNotFound(err):
 			err = fmt.Errorf("unit %q does not exist", name)
 		case err != nil:
+		case unit.IsVirtual() == true:
+			unit.Destroy()
 		case unit.Life() != state.Alive:
 			continue
 		case unit.IsPrincipal():

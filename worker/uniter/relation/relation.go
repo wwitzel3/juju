@@ -54,7 +54,6 @@ func (s *State) copy() *State {
 // against the current state before they are run, to ensure that the system
 // meets its guarantees about hook execution order.
 func (s *State) Validate(hi hook.Info) (err error) {
-	panic("HAHA")
 	defer errors.DeferredAnnotatef(&err, "inappropriate %q for %q", hi.Kind, hi.RemoteUnit)
 	if hi.RelationId != s.RelationId {
 		return fmt.Errorf("expected relation %d, got relation %d", s.RelationId, hi.RelationId)

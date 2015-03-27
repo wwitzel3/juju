@@ -45,12 +45,18 @@ func (rh *runHook) String() string {
 func (rh *runHook) Prepare(state State) (*State, error) {
 	name, err := rh.callbacks.PrepareHook(rh.info)
 	if err != nil {
+		logger.Debugf("prepareHook err: %#v", rh)
 		return nil, err
 	}
+	logger.Debugf("prepareHook: %#v", rh)
+
 	rnr, err := rh.runnerFactory.NewHookRunner(rh.info)
 	if err != nil {
+		logger.Debugf("hookRunner err: %#v", rh)
 		return nil, err
 	}
+	logger.Debugf("hookRunner: %#v", rh)
+
 	rh.name = name
 	rh.runner = rnr
 	return stateChange{

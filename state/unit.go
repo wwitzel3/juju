@@ -122,6 +122,10 @@ func newUnit(st *State, udoc *unitDoc) *Unit {
 	return unit
 }
 
+func (u *Unit) IsVirtual() bool {
+	return u.doc.Virtual
+}
+
 // Service returns the service.
 func (u *Unit) Service() (*Service, error) {
 	return u.st.Service(u.doc.Service)

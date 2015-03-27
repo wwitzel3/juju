@@ -46,7 +46,7 @@ func (c *Client) VirtualServiceDeploy(args params.VirtualServiceDeploy) error {
 		return err
 	}
 
-	if err := setVirtualServiceSettings(c.api.state, unit.Name(), args.Endpoints); err != nil {
+	if err := setVirtualServiceSettings(c.api.state, args.ServiceName, args.Endpoints); err != nil {
 		return err
 	}
 
@@ -75,10 +75,10 @@ func makeVirtualRelations(endpoints []params.VirtualEndpoint) map[string]charm.R
 	return relations
 }
 
-func setVirtualServiceSettings(st *state.State, unitName string, endpoints []params.VirtualEndpoint) error {
+func setVirtualServiceSettings(st *state.State, serviceName string, endpoints []params.VirtualEndpoint) error {
 	for _, ep := range endpoints {
-		key := strings.Join([]string{"global", "provider", unitName, ep.Relation, ep.Interface}, "#")
-		logger.Debugf("%q", key)
+		key := strings.Join([]string{"s", serviceName, ep.Relation, ep.Interface}, "#")
+		logger.Debugf("serviceKey: %q", key)
 		state.WriteVirtualSettings(st, key, ep.Payload)
 	}
 	return nil
