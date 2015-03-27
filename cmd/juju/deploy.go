@@ -170,7 +170,6 @@ func (c *DeployCommand) Init(args []string) error {
 		}
 		isVirtual := c.CharmRef.Schema == "virtual"
 		if isVirtual {
-			fmt.Printf("c.VirtualEndpoint = %q\n", c.VirtualEndpoints)
 			if c.VirtualEndpoints == "" && c.VirtualEndpointsFile == "" {
 				return fmt.Errorf("virtual charm type requires either --endpoints or --endpoints-file")
 			}
