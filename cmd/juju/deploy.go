@@ -320,9 +320,7 @@ func (c *DeployCommand) deployVirtualEndpoints(client *api.Client) error {
 		if err != nil {
 			return err
 		}
-		for _, endpoint := range commandlineEndpoints {
-			virtualEndpoints = append(virtualEndpoints, endpoint)
-		}
+		virtualEndpoints = append(virtualEndpoints, commandlineEndpoints...)
 	}
 	// Add the virtual endpoints defined from the endpoints file.
 	if c.VirtualEndpointsFile != "" {
@@ -330,9 +328,7 @@ func (c *DeployCommand) deployVirtualEndpoints(client *api.Client) error {
 		if err != nil {
 			return err
 		}
-		for _, endpoint := range fileEndpoints {
-			virtualEndpoints = append(virtualEndpoints, endpoint)
-		}
+		virtualEndpoints = append(virtualEndpoints, fileEndpoints...)
 	}
 	// Add the virtual servcie via the API.
 	if err := client.VirtualServiceDeploy(c.CharmRef.Name, virtualEndpoints); err != nil {
