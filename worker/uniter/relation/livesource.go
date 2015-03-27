@@ -8,11 +8,14 @@ import (
 	"sync"
 
 	"github.com/juju/errors"
+	"github.com/juju/loggo"
 	"gopkg.in/juju/charm.v4/hooks"
 
 	"github.com/juju/juju/state/multiwatcher"
 	"github.com/juju/juju/worker/uniter/hook"
 )
+
+var logger = loggo.GetLogger("livesource")
 
 // liveSource maintains a minimal queue of hooks that need to be run to reflect
 // relation state changes exposed via a RelationUnitsWatcher.
@@ -173,12 +176,14 @@ func (q *liveSource) Next() hook.Info {
 		kind = q.head.hookKind
 	}
 	version := q.info[unit].version
-	return hook.Info{
+	hi := hook.Info{
 		Kind:          kind,
 		RelationId:    q.relationId,
 		RemoteUnit:    unit,
 		ChangeVersion: version,
 	}
+	logger.Debugf("livesource.hookInfo: %#v", hi)
+	return hi
 }
 
 // Pop advances the queue. It will panic if the queue is already empty.

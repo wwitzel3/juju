@@ -50,6 +50,9 @@ func (c *Client) VirtualServiceDeploy(args params.VirtualServiceDeploy) error {
 		return err
 	}
 
+	if _, err := unit.SetAgentPresence(); err != nil {
+		return err
+	}
 	if err := unit.SetAgentStatus(state.StatusActive, "virtual", nil); err != nil {
 		return err
 	}

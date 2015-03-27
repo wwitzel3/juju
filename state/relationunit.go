@@ -85,7 +85,7 @@ func (ru *RelationUnit) EnterScope(settings map[string]interface{}) error {
 	}
 	if count, err := relationScopes.FindId(ruKey).Count(); err != nil {
 		return err
-	} else if count != 0 {
+	} else if count != 0 && ru.unit.doc.Virtual == false {
 		return nil
 	}
 

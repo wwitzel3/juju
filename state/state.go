@@ -1839,6 +1839,24 @@ func (st *State) AddRelation(eps ...Endpoint) (r *Relation, err error) {
 			return nil, errors.Errorf("container scoped relation requires at least one subordinate service")
 		}
 
+		for _, ep := range eps {
+			if ep.IsVirtual == true {
+				// * Create the scope doc.
+				key := strings.Join([]string{"global", "provider", ep.ServiceName + "/0", ep.Name, ep.Interface}, "#")
+				rsDocID := st.docID(key)
+				ops = append(ops, txn.Op{
+					C:      relationScopesC,
+					Id:     rsDocID,
+					Assert: txn.DocMissing,
+					Insert: relationScopeDoc{
+						DocID:   rsDocID,
+						Key:     key,
+						EnvUUID: st.EnvironUUID(),
+					},
+				})
+			}
+		}
+
 		// Create a new unique id if that has not already been done, and add
 		// an operation to create the relation document.
 		if id == -1 {
