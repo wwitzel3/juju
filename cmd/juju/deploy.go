@@ -314,14 +314,16 @@ func (c *DeployCommand) Run(ctx *cmd.Context) error {
 
 // deployVirtualEndpoints create the virtual endpoints based on the command-line parameters, deploy the virtual service,
 func (c *DeployCommand) deployVirtualEndpoints(client *api.Client) error {
-	var virtualEndpoints []params.VirtualEndpoints
+	var virtualEndpoints []params.VirtualEndpoint
 	// Add the virtual endpoints defined on the command-line.
 	if c.VirtualEndpoints != "" {
 		commandlineEndpoints, err := parseVirtualEndpoints(c.VirtualEndpoints)
 		if err != nil {
 			return err
 		}
-		append(virtualEndpoints, commandlineEndpoints)
+		for _, endpoint := range commandlineEndpoints {
+			virtualEndpoints = append(virtualEndpoints, endpoint)
+		}
 	}
 	// Add the virtual endpoints defined from the endpoints file.
 	if c.VirtualEndpointsFile != "" {
@@ -329,7 +331,9 @@ func (c *DeployCommand) deployVirtualEndpoints(client *api.Client) error {
 		if err != nil {
 			return err
 		}
-		append(virtualEndpoints, fileEndpoints)
+		for _, endpoint := range fileEndpoints {
+			virtualEndpoints = append(virtualEndpoints, endpoint)
+		}
 	}
 	// Add the virtual servcie via the API.
 	if err := client.VirtualServiceDeploy(c.CharmRef.Name, virtualEndpoints); err != nil {
@@ -406,7 +410,7 @@ func readEndpointsFile(endpointsFile string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	return strings.Split(endpointData, "\n"), nil
+	return strings.Split(string(endpointData), "\n"), nil
 }
 
 // parseVirtualEndpointsFile reads in the supported file types, return a slice of virtual endpoints.
@@ -414,11 +418,10 @@ func readEndpointsFile(endpointsFile string) ([]string, error) {
 // juju deploy virtual:name service-name --endpoints-file=endpoint.json
 // juju deploy virtual:name service-name --endpoints-file=endpoing.yaml
 func parseVirtualEndpointsFile(filepath string) ([]params.VirtualEndpoint, error) {
-	var virtualEndpoints []params.VirtualEndpoint
 	if strings.HasSuffix(filepath, "yaml") {
 		yamlEndpoints, err := parseVirtualEndpointsYAMLFile(filepath)
 		return yamlEndpoints, err
-	} else if strings.HasSuffix(str, "json") {
+	} else if strings.HasSuffix(filepath, "json") {
 		jsonEndpoints, err := parseVirtualEndpointsYAMLFile(filepath)
 		return jsonEndpoints, err
 	} else {
@@ -456,39 +459,39 @@ func parseVirtualEndpointsYAMLFile(filepath string) ([]params.VirtualEndpoint, e
 // juju deploy virtual:name service-name --endpoints=db:wat='{"key":"value"}',db:yeah='{"key":"value"}'
 func parseVirtualEndpoints(input string) ([]params.VirtualEndpoint, error) {
 	endpoint, err := parseVirtualEndpoint(input)
-	return []params.VirtualEndpoints{endpoint}, err
+	return []params.VirtualEndpoint{endpoint}, err
 }
 
 // parseVirtualEndpoint takes a single endpoint string and parses out the relation, interface and JSON data.
 // Expected format:  relation:interface=JSON
 // example: db:wat='{}'
-func parseVirtualEndpoint(data string) (VirtualEndpoint, error) {
-	var virtEndpoint params.VirtualEndpoint
+func parseVirtualEndpoint(data string) (params.VirtualEndpoint, error) {
+	var endpoint params.VirtualEndpoint
 
 	relation_index := strings.Index(data, ":")
 	if relation_index == -1 {
-		return virtEndpoint, errors.Errorf("no relation index found in %q", data)
+		return endpoint, errors.Errorf("no relation index found in %q", data)
 	}
 
 	endpoint.Relation = strings.TrimSpace(data[:relation_index])
 	if endpoint.Relation == "" {
-		return virtEndpoint, errors.Errorf("no relation name found in %q", data)
+		return endpoint, errors.Errorf("no relation name found in %q", data)
 	}
 
 	interface_index := strings.Index(data, "=")
 	if interface_index == -1 {
-		return virtEndpoint, errors.Errorf("no interface name found in %q", data)
+		return endpoint, errors.Errorf("no interface name found in %q", data)
 	}
 
 	endpoint.Interface = strings.TrimSpace(data[relation_index+1 : interface_index])
 	if endpoint.Interface == "" {
-		return virtEndpoint, errors.Errorf("no interface name found in %q", endpoint)
+		return endpoint, errors.Errorf("no interface name found in %q", endpoint)
 	}
 
 	json_data := strings.TrimSpace(data[interface_index+1:])
 	if err := json.Unmarshal([]byte(json_data), &endpoint.Payload); err != nil {
-		return virtEndpoint, errors.Errorf("invalid JSON: %+v", json_data)
+		return endpoint, errors.Errorf("invalid JSON: %+v", json_data)
 	}
 
-	return virtualEndpoint, nil
+	return endpoint, nil
 }
