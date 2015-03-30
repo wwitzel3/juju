@@ -1847,7 +1847,6 @@ func (st *State) AddRelation(eps ...Endpoint) (r *Relation, err error) {
 				return nil, errors.Trace(err)
 			}
 		}
-		logger.Debugf("AddRelation eps: %#v", eps)
 		docID := st.docID(key)
 		doc = &relationDoc{
 			DocID:     docID,
@@ -1863,6 +1862,34 @@ func (st *State) AddRelation(eps ...Endpoint) (r *Relation, err error) {
 			Assert: txn.DocMissing,
 			Insert: doc,
 		})
+
+		for _, ep := range eps {
+			if ep.IsVirtual == true {
+				// * Create the scope doc.
+				serviceKey := strings.Join([]string{"s", ep.ServiceName, ep.Name, ep.Interface}, "#")
+				logger.Debugf("addRelation.serviceKey: %s", serviceKey)
+				values, err := st.ReadSettings(serviceKey)
+				if err != nil {
+					return nil, err
+				}
+
+				key := strings.Join([]string{"r", fmt.Sprintf("%d", id), string(ep.Role), ep.ServiceName + "/0"}, "#")
+				logger.Debugf("addRelation.settings/relationScopeKey: %s", key)
+				ops = append(ops, createSettingsOp(st, key, values.Map()))
+				rsDocID := st.docID(key)
+				ops = append(ops, txn.Op{
+					C:      relationScopesC,
+					Id:     rsDocID,
+					Assert: txn.DocMissing,
+					Insert: relationScopeDoc{
+						DocID:   rsDocID,
+						Key:     key,
+						EnvUUID: st.EnvironUUID(),
+					},
+				})
+			}
+		}
+
 		return ops, nil
 	}
 	if err = st.run(buildTxn); err == nil {

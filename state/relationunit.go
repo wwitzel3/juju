@@ -85,7 +85,7 @@ func (ru *RelationUnit) EnterScope(settings map[string]interface{}) error {
 	}
 	if count, err := relationScopes.FindId(ruKey).Count(); err != nil {
 		return err
-	} else if count != 0 {
+	} else if count != 0 && ru.unit.doc.Virtual == false {
 		return nil
 	}
 
@@ -447,7 +447,10 @@ func (ru *RelationUnit) key(unit *Unit) (string, error) {
 	uname := unit.Name()
 
 	if ep := hasVirtualEndpoints(ru.Relation().Endpoints()); ep != nil {
-		return strings.Join([]string{"global", "provider", uname, ep.Name, ep.Interface}, "#"), nil
+		id := fmt.Sprintf("%d", ru.Relation().doc.Id)
+		key := strings.Join([]string{"r", id, string(ep.Role), ep.ServiceName + "/0"}, "#")
+		ruLogger.Debugf("virtualKey: %s", key)
+		return key, nil
 	}
 
 	uparts := strings.Split(uname, "/")
@@ -457,7 +460,9 @@ func (ru *RelationUnit) key(unit *Unit) (string, error) {
 		return "", err
 	}
 	parts := []string{ru.scope, string(ep.Role), uname}
-	return strings.Join(parts, "#"), nil
+	key := strings.Join(parts, "#")
+	ruLogger.Debugf("ruKey: %s", key)
+	return key, nil
 }
 
 // relationScopeDoc represents a unit which is in a relation scope.

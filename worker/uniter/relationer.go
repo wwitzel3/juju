@@ -136,6 +136,7 @@ func (r *Relationer) PrepareHook(hi hook.Info) (hookName string, err error) {
 		panic("implicit relations must not run hooks")
 	}
 	if err = r.dir.State().Validate(hi); err != nil {
+		logger.Debugf("relationer: %s, %#v", err, hi)
 		return
 	}
 	name := r.ru.Endpoint().Name
