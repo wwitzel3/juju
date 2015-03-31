@@ -6,6 +6,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"gopkg.in/yaml.v1"
 	"io/ioutil"
 	"os"
 	"strings"
@@ -181,7 +182,7 @@ func (c *DeployCommand) Init(args []string) error {
 		if c.VirtualEndpoints != "" && !isVirtual {
 			return fmt.Errorf("using --endpoints requires the virtual charm type")
 		}
-		if c.VirtualEndpointsFile == "" && !isVirtual {
+		if c.VirtualEndpointsFile != "" && !isVirtual {
 			return fmt.Errorf("using --endpoints-file requires the virtual charm type")
 		}
 
@@ -409,7 +410,7 @@ func readEndpointsFile(endpointsFile string) ([]string, error) {
 }
 
 // parseVirtualEndpointsFile reads in the supported file types, return a slice of virtual endpoints.
-// examples:
+// Examples:
 // juju deploy virtual:name service-name --endpoints-file=endpoint.json
 // juju deploy virtual:name service-name --endpoints-file=endpoing.yaml
 func parseVirtualEndpointsFile(filepath string) ([]params.VirtualEndpoint, error) {
@@ -417,40 +418,68 @@ func parseVirtualEndpointsFile(filepath string) ([]params.VirtualEndpoint, error
 		yamlEndpoints, err := parseVirtualEndpointsYAMLFile(filepath)
 		return yamlEndpoints, err
 	} else if strings.HasSuffix(filepath, "json") {
-		jsonEndpoints, err := parseVirtualEndpointsYAMLFile(filepath)
+		jsonEndpoints, err := parseVirtualEndpointsJSONFile(filepath)
 		return jsonEndpoints, err
 	} else {
 		return nil, errors.New("unsupported endpoint file type")
 	}
 }
 
-// parseVirtualEndpointJSONFile read a json file, emit virtual endpoints.
-// example:
-// juju deploy virtual:name service-name --endpoints-file=endpoint.json
-// {"endpoints":["db:wat":{"key":"value"},
-//	         "db:hey":{"key":"value"}]}
+// parseVirtualEndpointsJSONFile reads in the JSON file, converting the content
+// to a VirtualEndpoint struct. The file must be in the format:
+//     {"endpoints":[{"relation":"website","interface":"http","values":{
+//     "hostname": "10.0.3.1","port":"6543","private-address":"10.0.3.1"}}]}
 func parseVirtualEndpointsJSONFile(filepath string) ([]params.VirtualEndpoint, error) {
-	// TODO read in the JSON file and convert to VirtualEndpoing struct.
+	var jsonData params.VirtualEndpointConfig
+	contents, err := ioutil.ReadFile(filepath)
+	if err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(contents, &jsonData); err != nil {
+		return nil, err
+	}
 	var virtualEndpoints []params.VirtualEndpoint
+	for a := range jsonData.Endpoints {
+		var endpoint params.VirtualEndpoint
+		endpoint.Relation = jsonData.Endpoints[a].Relation
+		endpoint.Interface = jsonData.Endpoints[a].Interface
+		endpoint.Values = jsonData.Endpoints[a].Values
+		virtualEndpoints = append(virtualEndpoints, endpoint)
+	}
 	return virtualEndpoints, nil
 }
 
-// parseVirtualEndpointYAMLFile read a yaml file, emit virtual endpoints.
-// example:
-// juju deploy virtual:name service-name --endpoints-file=endpoint.yaml
-// endpoints:
-//  - 'db:wat':
-//      key: value
-//  - 'db:hey':
-//      key: value
+// parseVirtualEndpointYAMLFile read a YAML file, converting the contents to
+// a VirtualEndpoint struct. The YAML file must be in the following format:
+//    endpoints:
+//    - interface: http
+//      relation: website
+//      values:
+//        hostname: 10.0.3.1
+//        port: '6543'
+//        private-address: 10.0.3.1
 func parseVirtualEndpointsYAMLFile(filepath string) ([]params.VirtualEndpoint, error) {
-	// TODO read in the YAML file and convert to a VirtualEndpoint struct.
+	var yamlData params.VirtualEndpointConfig
+	contents, err := ioutil.ReadFile(filepath)
+	if err != nil {
+		return nil, err
+	}
+	if err := yaml.Unmarshal(contents, &yamlData); err != nil {
+		return nil, err
+	}
 	var virtualEndpoints []params.VirtualEndpoint
+	for a := range yamlData.Endpoints {
+		var endpoint params.VirtualEndpoint
+		endpoint.Relation = yamlData.Endpoints[a].Relation
+		endpoint.Interface = yamlData.Endpoints[a].Interface
+		endpoint.Values = yamlData.Endpoints[a].Values
+		virtualEndpoints = append(virtualEndpoints, endpoint)
+	}
 	return virtualEndpoints, nil
 }
 
 // parseVirtualEndpoints convert the command-line string to virtual endpoint data.
-// example:
+// Example:
 // juju deploy virtual:name service-name --endpoints=db:wat='{"key":"value"}',db:yeah='{"key":"value"}'
 func parseVirtualEndpoints(input string) ([]params.VirtualEndpoint, error) {
 	endpoint, err := parseVirtualEndpoint(input)
@@ -459,7 +488,7 @@ func parseVirtualEndpoints(input string) ([]params.VirtualEndpoint, error) {
 
 // parseVirtualEndpoint takes a single endpoint string and parses out the relation, interface and JSON data.
 // Expected format:  relation:interface=JSON
-// example: db:wat='{}'
+// Example: juju deploy virtual:name service-name --endpoints=db:wat='{"key":"value"}',db:yeah='{"key":"value"}'
 func parseVirtualEndpoint(data string) (params.VirtualEndpoint, error) {
 	var endpoint params.VirtualEndpoint
 
@@ -484,7 +513,7 @@ func parseVirtualEndpoint(data string) (params.VirtualEndpoint, error) {
 	}
 
 	json_data := strings.TrimSpace(data[interface_index+1:])
-	if err := json.Unmarshal([]byte(json_data), &endpoint.Payload); err != nil {
+	if err := json.Unmarshal([]byte(json_data), &endpoint.Values); err != nil {
 		return endpoint, errors.Errorf("invalid JSON: %+v", json_data)
 	}
 
