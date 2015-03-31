@@ -79,7 +79,7 @@ func setVirtualServiceSettings(st *state.State, serviceName string, endpoints []
 	for _, ep := range endpoints {
 		key := strings.Join([]string{"s", serviceName, ep.Relation, ep.Interface}, "#")
 		logger.Debugf("serviceKey: %q", key)
-		state.WriteVirtualSettings(st, key, ep.Payload)
+		state.WriteVirtualSettings(st, key, ep.Values)
 	}
 	return nil
 }
