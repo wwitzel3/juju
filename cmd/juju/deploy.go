@@ -6,6 +6,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"gopkg.in/yaml.v1"
 	"io/ioutil"
 	"os"
 	"strings"
@@ -48,7 +49,8 @@ type DeployCommand struct {
 	Storage map[string]storage.Constraints
 
 	// VirtualEndpoints
-	VirtualEndpoints string
+	VirtualEndpoints     string
+	VirtualEndpointsFile string
 }
 
 const deployDoc = `
@@ -149,7 +151,8 @@ func (c *DeployCommand) SetFlags(f *gnuflag.FlagSet) {
 		// version supports storage, and error if it doesn't.
 		f.Var(storageFlag{&c.Storage}, "storage", "charm storage constraints")
 	}
-	f.StringVar(&c.VirtualEndpoints, "endpoint-file", "", "file that defines the interface(s) for the virtual service")
+	f.StringVar(&c.VirtualEndpointsFile, "endpoints-file", "", "file that defines the interface(s) for the virtual service")
+	f.StringVar(&c.VirtualEndpoints, "endpoints", "", "the endpoint definition(s) for virtual service")
 }
 
 func (c *DeployCommand) Init(args []string) error {
@@ -166,21 +169,24 @@ func (c *DeployCommand) Init(args []string) error {
 		if err != nil {
 			return err
 		}
-
-		if c.CharmRef.Schema == "virtual" {
-			if c.VirtualEndpoints == "" {
-				return fmt.Errorf("virtual charm type requires --endpoint-file")
+		isVirtual := c.CharmRef.Schema == "virtual"
+		if isVirtual {
+			if c.VirtualEndpoints == "" && c.VirtualEndpointsFile == "" {
+				return fmt.Errorf("virtual charm type requires either --endpoints or --endpoints-file")
 			}
 			if c.NumUnits > 1 {
 				return fmt.Errorf("virtual charm type does not support multiple principal units")
 			}
 		}
 
-		if c.CharmRef.Schema != "virtual" && c.VirtualEndpoints != "" {
-			return fmt.Errorf("using --endpoint-file requires the virtual charm type")
+		if c.VirtualEndpoints != "" && !isVirtual {
+			return fmt.Errorf("using --endpoints requires the virtual charm type")
+		}
+		if c.VirtualEndpointsFile != "" && !isVirtual {
+			return fmt.Errorf("using --endpoints-file requires the virtual charm type")
 		}
 
-		if c.CharmRef.Schema != "virtual" {
+		if !isVirtual {
 			if _, err := charm.InferURL(args[0], "fake"); err != nil {
 				return fmt.Errorf("invalid charm name %q", args[0])
 			}
@@ -211,7 +217,7 @@ func (c *DeployCommand) Run(ctx *cmd.Context) error {
 	}
 
 	if c.CharmRef.Schema == "virtual" {
-		err := addVirtualServiceViaAPI(client, c.CharmRef, c.VirtualEndpoints)
+		err = c.deployVirtualEndpoints(client)
 		return block.ProcessBlockedError(err, block.BlockChange)
 	}
 
@@ -306,14 +312,27 @@ func (c *DeployCommand) Run(ctx *cmd.Context) error {
 	return block.ProcessBlockedError(err, block.BlockChange)
 }
 
-// addVirtualServiceViaAPI
-func addVirtualServiceViaAPI(client *api.Client, ref *charm.Reference, endpoints string) error {
-	virtEndpoints, err := parseVirtualEndpoints(endpoints)
-	if err != nil {
-		return err
+// deployVirtualEndpoints create the virtual endpoints based on the command-line parameters, deploy the virtual service,
+func (c *DeployCommand) deployVirtualEndpoints(client *api.Client) error {
+	var virtualEndpoints []params.VirtualEndpoint
+	// Add the virtual endpoints defined on the command-line.
+	if c.VirtualEndpoints != "" {
+		commandlineEndpoints, err := parseVirtualEndpoints(c.VirtualEndpoints)
+		if err != nil {
+			return err
+		}
+		virtualEndpoints = append(virtualEndpoints, commandlineEndpoints...)
 	}
-
-	if err := client.VirtualServiceDeploy(ref.Name, virtEndpoints); err != nil {
+	// Add the virtual endpoints defined from the endpoints file.
+	if c.VirtualEndpointsFile != "" {
+		fileEndpoints, err := parseVirtualEndpointsFile(c.VirtualEndpointsFile)
+		if err != nil {
+			return err
+		}
+		virtualEndpoints = append(virtualEndpoints, fileEndpoints...)
+	}
+	// Add the virtual servcie via the API.
+	if err := client.VirtualServiceDeploy(c.CharmRef.Name, virtualEndpoints); err != nil {
 		return err
 	}
 	return nil
@@ -381,41 +400,122 @@ func networkNamesToTags(networks []string) ([]string, error) {
 
 }
 
-func parseVirtualEndpoints(endpointArg string) ([]params.VirtualEndpoint, error) {
-	fdata, err := ioutil.ReadFile(endpointArg)
+// readEndpointsFile opens a file and reads the strings that define endpoints.
+func readEndpointsFile(endpointsFile string) ([]string, error) {
+	endpointData, err := ioutil.ReadFile(endpointsFile)
 	if err != nil {
 		return nil, err
 	}
+	return strings.Split(string(endpointData), "\n"), nil
+}
 
-	data := string(fdata)
-	var virtEndpoints []params.VirtualEndpoint
+// parseVirtualEndpointsFile reads in the supported file types, return a slice of virtual endpoints.
+// Examples:
+// juju deploy virtual:name service-name --endpoints-file=endpoint.json
+// juju deploy virtual:name service-name --endpoints-file=endpoing.yaml
+func parseVirtualEndpointsFile(filepath string) ([]params.VirtualEndpoint, error) {
+	if strings.HasSuffix(filepath, "yaml") {
+		yamlEndpoints, err := parseVirtualEndpointsYAMLFile(filepath)
+		return yamlEndpoints, err
+	} else if strings.HasSuffix(filepath, "json") {
+		jsonEndpoints, err := parseVirtualEndpointsJSONFile(filepath)
+		return jsonEndpoints, err
+	} else {
+		return nil, errors.New("unsupported endpoint file type")
+	}
+}
+
+// parseVirtualEndpointsJSONFile reads in the JSON file, converting the content
+// to a VirtualEndpoint struct. The file must be in the format:
+//     {"endpoints":[{"relation":"website","interface":"http","values":{
+//     "hostname": "10.0.3.1","port":"6543","private-address":"10.0.3.1"}}]}
+func parseVirtualEndpointsJSONFile(filepath string) ([]params.VirtualEndpoint, error) {
+	var jsonData params.VirtualEndpointConfig
+	contents, err := ioutil.ReadFile(filepath)
+	if err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(contents, &jsonData); err != nil {
+		return nil, err
+	}
+	var virtualEndpoints []params.VirtualEndpoint
+	for a := range jsonData.Endpoints {
+		var endpoint params.VirtualEndpoint
+		endpoint.Relation = jsonData.Endpoints[a].Relation
+		endpoint.Interface = jsonData.Endpoints[a].Interface
+		endpoint.Values = jsonData.Endpoints[a].Values
+		virtualEndpoints = append(virtualEndpoints, endpoint)
+	}
+	return virtualEndpoints, nil
+}
+
+// parseVirtualEndpointYAMLFile read a YAML file, converting the contents to
+// a VirtualEndpoint struct. The YAML file must be in the following format:
+//    endpoints:
+//    - interface: http
+//      relation: website
+//      values:
+//        hostname: 10.0.3.1
+//        port: '6543'
+//        private-address: 10.0.3.1
+func parseVirtualEndpointsYAMLFile(filepath string) ([]params.VirtualEndpoint, error) {
+	var yamlData params.VirtualEndpointConfig
+	contents, err := ioutil.ReadFile(filepath)
+	if err != nil {
+		return nil, err
+	}
+	if err := yaml.Unmarshal(contents, &yamlData); err != nil {
+		return nil, err
+	}
+	var virtualEndpoints []params.VirtualEndpoint
+	for a := range yamlData.Endpoints {
+		var endpoint params.VirtualEndpoint
+		endpoint.Relation = yamlData.Endpoints[a].Relation
+		endpoint.Interface = yamlData.Endpoints[a].Interface
+		endpoint.Values = yamlData.Endpoints[a].Values
+		virtualEndpoints = append(virtualEndpoints, endpoint)
+	}
+	return virtualEndpoints, nil
+}
+
+// parseVirtualEndpoints convert the command-line string to virtual endpoint data.
+// Example:
+// juju deploy virtual:name service-name --endpoints=db:wat='{"key":"value"}',db:yeah='{"key":"value"}'
+func parseVirtualEndpoints(input string) ([]params.VirtualEndpoint, error) {
+	endpoint, err := parseVirtualEndpoint(input)
+	return []params.VirtualEndpoint{endpoint}, err
+}
+
+// parseVirtualEndpoint takes a single endpoint string and parses out the relation, interface and JSON data.
+// Expected format:  relation:interface=JSON
+// Example: juju deploy virtual:name service-name --endpoints=db:wat='{"key":"value"}',db:yeah='{"key":"value"}'
+func parseVirtualEndpoint(data string) (params.VirtualEndpoint, error) {
 	var endpoint params.VirtualEndpoint
 
 	relation_index := strings.Index(data, ":")
 	if relation_index == -1 {
-		return virtEndpoints, errors.Errorf("no relation index found in %q", data)
+		return endpoint, errors.Errorf("no relation index found in %q", data)
 	}
 
 	endpoint.Relation = strings.TrimSpace(data[:relation_index])
 	if endpoint.Relation == "" {
-		return virtEndpoints, errors.Errorf("no relation name found in %q", data)
+		return endpoint, errors.Errorf("no relation name found in %q", data)
 	}
 
 	interface_index := strings.Index(data, "=")
 	if interface_index == -1 {
-		return virtEndpoints, errors.Errorf("no interface name found in %q", data)
+		return endpoint, errors.Errorf("no interface name found in %q", data)
 	}
 
 	endpoint.Interface = strings.TrimSpace(data[relation_index+1 : interface_index])
 	if endpoint.Interface == "" {
-		return virtEndpoints, errors.Errorf("no interface name found in %q", data)
+		return endpoint, errors.Errorf("no interface name found in %q", endpoint)
 	}
 
 	json_data := strings.TrimSpace(data[interface_index+1:])
-	if err := json.Unmarshal([]byte(json_data), &endpoint.Payload); err != nil {
-		return virtEndpoints, errors.Errorf("invalid JSON: %+v", json_data)
+	if err := json.Unmarshal([]byte(json_data), &endpoint.Values); err != nil {
+		return endpoint, errors.Errorf("invalid JSON: %+v", json_data)
 	}
-	vp := []params.VirtualEndpoint{endpoint}
-	logger.Debugf("%#v", vp)
-	return vp, nil
+
+	return endpoint, nil
 }

@@ -185,7 +185,19 @@ type DestroyMachines struct {
 type VirtualEndpoint struct {
 	Relation  string
 	Interface string
-	Payload   map[string]interface{}
+	Values    map[string]interface{}
+}
+
+// The VirtualEndpointConfig is a data structure to use to when reading
+// in the JSON or YAML file that contains virtual endpoint definition.
+// Example:
+// {"endpoints":[{"relation":"website","interface":"http","values":{"hostname":"10.0.3.1"},{"port":"6543"},{"private-address" :"10.0.3.1"}}]}
+type VirtualEndpointConfig struct {
+	Endpoints []struct {
+		Relation  string                   `json:"relation" yaml:"relation"`
+		Interface string                   `json:"interface" yaml:"interface"`
+		Values    map[string]interface{}   `json:"values" yaml:"values"`
+	} `json:"endpoints" yaml:"endpoints"`
 }
 
 // VirtualServiceDeploy
