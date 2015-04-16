@@ -510,7 +510,8 @@ func (env *maasEnviron) getCapabilities() (set.Strings, error) {
 			if err, ok := err.(gomaasapi.ServerError); ok && err.StatusCode == 404 {
 				return caps, fmt.Errorf("MAAS does not support version info")
 			}
-			return caps, err
+		} else {
+			break
 		}
 	}
 	if err != nil {
@@ -998,19 +999,21 @@ func (environ *maasEnviron) selectNode(args selectNodeArgs) (*gomaasapi.MAASObje
 // newCloudinitConfig creates a cloudinit.Config structure
 // suitable as a base for initialising a MAAS node.
 func (environ *maasEnviron) newCloudinitConfig(hostname, primaryIface, series string) (*cloudinit.Config, error) {
-	info := machineInfo{hostname}
-	runCmd, err := info.cloudinitRunCmd(series)
-
+	cloudcfg, err := cloudinit.New(series)
 	if err != nil {
-		return nil, err
+		return nil, errors.Trace(err)
 	}
 
-	cloudcfg := cloudinit.New()
+	info := machineInfo{hostname}
+	runCmd, err := info.cloudinitRunCmd(cloudcfg)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
 	operatingSystem, err := version.GetOSFromSeries(series)
 	if err != nil {
-		return nil, err
+		return nil, errors.Trace(err)
 	}
-
 	switch operatingSystem {
 	case version.Windows:
 		cloudcfg.AddScripts(runCmd)
@@ -1601,12 +1604,11 @@ func extractInterfaces(inst instance.Instance, lshwXML []byte) (map[string]iface
 	primaryIface := ""
 	interfaces := make(map[string]ifaceInfo)
 	var processNodes func(nodes []Node) error
+	var baseIndex int
 	processNodes = func(nodes []Node) error {
 		for _, node := range nodes {
 			if strings.HasPrefix(node.Id, "network") {
-				// If there's a single interface, the ID won't have an
-				// index suffix.
-				index := 0
+				index := baseIndex
 				if strings.HasPrefix(node.Id, "network:") {
 					// There is an index suffix, parse it.
 					var err error
@@ -1614,7 +1616,10 @@ func extractInterfaces(inst instance.Instance, lshwXML []byte) (map[string]iface
 					if err != nil {
 						return errors.Annotatef(err, "lshw output for node %q has invalid ID suffix for %q", inst.Id(), node.Id)
 					}
+				} else {
+					baseIndex++
 				}
+
 				if primaryIface == "" && !node.Disabled {
 					primaryIface = node.LogicalName
 					logger.Debugf("node %q primary network interface is %q", inst.Id(), primaryIface)

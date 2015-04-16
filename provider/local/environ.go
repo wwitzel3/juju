@@ -170,7 +170,10 @@ func (env *localEnviron) finishBootstrap(ctx environs.BootstrapContext, mcfg *cl
 	mcfg.ProxySettings = proxy.Settings{}
 	mcfg.AptMirror = ""
 
-	cloudcfg := coreCloudinit.New()
+	cloudcfg, err := coreCloudinit.New(mcfg.Series)
+	if err != nil {
+		return errors.Trace(err)
+	}
 	cloudcfg.SetAptUpdate(mcfg.EnableOSRefreshUpdate)
 	cloudcfg.SetAptUpgrade(mcfg.EnableOSUpgrade)
 
@@ -388,11 +391,10 @@ func (env *localEnviron) StartInstance(args environs.StartInstanceParams) (*envi
 var createContainer = func(env *localEnviron, args environs.StartInstanceParams) (instance.Instance, *instance.HardwareCharacteristics, error) {
 	series := args.Tools.OneSeries()
 	network := container.BridgeNetworkConfig(env.config.networkBridge(), args.NetworkInfo)
-	storage := container.NewStorageConfig(args.Volumes)
 	allowLoopMounts, _ := env.config.AllowLXCLoopMounts()
 	isLXC := env.config.container() == instance.LXC
-	if isLXC && !allowLoopMounts && storage.AllowMount {
-		return nil, nil, container.ErrLoopMountNotAllowed
+	storage := &container.StorageConfig{
+		AllowMount: !isLXC || allowLoopMounts,
 	}
 	inst, hardware, err := env.containerManager.CreateContainer(args.MachineConfig, series, network, storage)
 	if err != nil {

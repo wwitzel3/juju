@@ -6,6 +6,7 @@ package apiserver
 import (
 	"fmt"
 	"reflect"
+	"time"
 
 	"github.com/juju/names"
 	jc "github.com/juju/testing/checkers"
@@ -22,6 +23,8 @@ var (
 	NewPingTimeout        = newPingTimeout
 	MaxClientPingInterval = &maxClientPingInterval
 	MongoPingInterval     = &mongoPingInterval
+	NewTimer              = &newTimer
+	ResetTimer            = &resetTimer
 	NewBackups            = &newBackups
 	ParseLogLine          = parseLogLine
 	AgentMatchesFilter    = agentMatchesFilter
@@ -43,9 +46,9 @@ func DelayLogins() (nextChan chan struct{}, cleanup func()) {
 	cleanup = func() {
 		doCheckCreds = checkCreds
 	}
-	delayedCheckCreds := func(st *state.State, c params.LoginRequest) (state.Entity, error) {
+	delayedCheckCreds := func(st *state.State, c params.LoginRequest, lookForEnvUser bool) (state.Entity, *time.Time, error) {
 		<-nextChan
-		return checkCreds(st, c)
+		return checkCreds(st, c, lookForEnvUser)
 	}
 	doCheckCreds = delayedCheckCreds
 	return

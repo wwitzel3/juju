@@ -62,3 +62,42 @@ func (c *Client) List() ([]params.StorageInfo, error) {
 	}
 	return found.Results, nil
 }
+
+// ListPools returns a list of pools that matches given filter.
+// If no filter was provided, a list of all pools is returned.
+func (c *Client) ListPools(providers, names []string) ([]params.StoragePool, error) {
+	args := params.StoragePoolFilter{
+		Names:     names,
+		Providers: providers,
+	}
+	found := params.StoragePoolsResult{}
+	if err := c.facade.FacadeCall("ListPools", args, &found); err != nil {
+		return nil, errors.Trace(err)
+	}
+	return found.Results, nil
+}
+
+// CreatePool creates pool with specified parameters.
+func (c *Client) CreatePool(pname, provider string, attrs map[string]interface{}) error {
+	args := params.StoragePool{
+		Name:     pname,
+		Provider: provider,
+		Attrs:    attrs,
+	}
+	return c.facade.FacadeCall("CreatePool", args, nil)
+}
+
+// ListVolumes lists volumes for desired machines.
+// If no machines provided, a list of all volumes is returned.
+func (c *Client) ListVolumes(machines []string) ([]params.VolumeItem, error) {
+	tags := make([]string, len(machines))
+	for i, one := range machines {
+		tags[i] = names.NewMachineTag(one).String()
+	}
+	args := params.VolumeFilter{Machines: tags}
+	found := params.VolumeItemsResult{}
+	if err := c.facade.FacadeCall("ListVolumes", args, &found); err != nil {
+		return nil, errors.Trace(err)
+	}
+	return found.Results, nil
+}

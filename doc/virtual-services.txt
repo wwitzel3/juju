@@ -1,0 +1,10 @@
+Virtual Services
+================
+
+ServiceIdentifier string
+Nodes []JSON
+
+juju deploy Virtual
+
+juju deploy virtual:postgresql postgresql=’{“user”: “admin”, “passwd”: “admin”, “host”: “10.0.1.54”, “port”: 5432}'
+

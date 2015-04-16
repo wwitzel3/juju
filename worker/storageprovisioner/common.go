@@ -116,6 +116,8 @@ func removeAttachments(ctx *context, ids []params.MachineStorageId) error {
 	return nil
 }
 
+var errNonDynamic = errors.New("non-dynamic storage provider")
+
 // volumeSource returns a volume source given a name, provider type,
 // environment config and storage directory.
 //
@@ -133,7 +135,34 @@ func volumeSource(
 	if err != nil {
 		return nil, errors.Annotatef(err, "getting storage source %q params", sourceName)
 	}
+	if !provider.Dynamic() {
+		return nil, errNonDynamic
+	}
 	source, err := provider.VolumeSource(environConfig, sourceConfig)
+	if err != nil {
+		return nil, errors.Annotatef(err, "getting storage source %q", sourceName)
+	}
+	return source, nil
+}
+
+// filesystemSource returns a filesystem source given a name, provider type,
+// environment config and storage directory.
+//
+// TODO(axw) move this to the main storageprovisioner, and have
+// it watch for changes to storage source configurations, updating
+// a map in-between calls to the volume/filesystem/attachment
+// event handlers.
+func filesystemSource(
+	environConfig *config.Config,
+	baseStorageDir string,
+	sourceName string,
+	providerType storage.ProviderType,
+) (storage.FilesystemSource, error) {
+	provider, sourceConfig, err := sourceParams(providerType, sourceName, baseStorageDir)
+	if err != nil {
+		return nil, errors.Annotatef(err, "getting storage source %q params", sourceName)
+	}
+	source, err := provider.FilesystemSource(environConfig, sourceConfig)
 	if err != nil {
 		return nil, errors.Annotatef(err, "getting storage source %q", sourceName)
 	}

@@ -14,7 +14,7 @@ import (
 	jc "github.com/juju/testing/checkers"
 	"github.com/juju/utils"
 	gc "gopkg.in/check.v1"
-	"gopkg.in/juju/charm.v4"
+	"gopkg.in/juju/charm.v5-unstable"
 
 	"github.com/juju/juju/environs"
 	"github.com/juju/juju/instance"
@@ -396,7 +396,10 @@ func (factory *Factory) MakeMetric(c *gc.C, params *MetricParams) *state.MetricB
 		params.Metrics = []state.Metric{{"pings", strconv.Itoa(uniqueInteger()), *params.Time}}
 	}
 
-	metric, err := params.Unit.AddMetrics(*params.Time, params.Metrics)
+	chURL, ok := params.Unit.CharmURL()
+	c.Assert(ok, gc.Equals, true)
+
+	metric, err := params.Unit.AddMetrics(utils.MustNewUUID().String(), *params.Time, chURL.String(), params.Metrics)
 	c.Assert(err, jc.ErrorIsNil)
 	if params.Sent {
 		err := metric.SetSent()

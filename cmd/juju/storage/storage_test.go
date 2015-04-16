@@ -12,7 +12,9 @@ import (
 var expectedSubCommmandNames = []string{
 	"help",
 	"list",
+	"pool",
 	"show",
+	"volume",
 }
 
 type storageSuite struct {

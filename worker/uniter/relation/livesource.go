@@ -8,11 +8,10 @@ import (
 	"sync"
 
 	"github.com/juju/errors"
-	"github.com/juju/loggo"
-	"gopkg.in/juju/charm.v4/hooks"
-
 	"github.com/juju/juju/state/multiwatcher"
 	"github.com/juju/juju/worker/uniter/hook"
+	"github.com/juju/loggo"
+	"gopkg.in/juju/charm.v5-unstable/hooks"
 )
 
 var logger = loggo.GetLogger("livesource")

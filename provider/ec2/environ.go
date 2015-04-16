@@ -499,9 +499,7 @@ func (e *environ) StartInstance(args environs.StartInstanceParams) (*environs.St
 	}
 	var instResp *ec2.RunInstancesResp
 
-	blockDeviceMappings, volumes, volumeAttachments, err := getBlockDeviceMappings(
-		*spec.InstanceType.VirtType, &args,
-	)
+	blockDeviceMappings, err := getBlockDeviceMappings(args.Constraints)
 	if err != nil {
 		return nil, errors.Annotate(err, "cannot create block device mappings")
 	}
@@ -540,13 +538,6 @@ func (e *environ) StartInstance(args environs.StartInstanceParams) (*environs.St
 	// TODO(axw) tag all resources (instances and volumes), for accounting
 	// and identification.
 
-	if err := assignVolumeIds(inst, volumes, volumeAttachments); err != nil {
-		if err := e.StopInstances(inst.Id()); err != nil {
-			logger.Errorf("failed to stop instance: %v", err)
-		}
-		return nil, err
-	}
-
 	if multiwatcher.AnyJobNeedsState(args.MachineConfig.Jobs...) {
 		if err := common.AddStateInstance(e.Storage(), inst.Id()); err != nil {
 			logger.Errorf("could not record instance in provider-state: %v", err)
@@ -563,10 +554,8 @@ func (e *environ) StartInstance(args environs.StartInstanceParams) (*environs.St
 		AvailabilityZone: &inst.Instance.AvailZone,
 	}
 	return &environs.StartInstanceResult{
-		Instance:          inst,
-		Hardware:          &hc,
-		Volumes:           volumes,
-		VolumeAttachments: volumeAttachments,
+		Instance: inst,
+		Hardware: &hc,
 	}, nil
 }
 
@@ -784,6 +773,13 @@ func (e *environ) AllocateAddress(instId instance.Id, _ network.Id, addr network
 // AllocateAddress. Implements NetworkingEnviron.ReleaseAddress.
 func (e *environ) ReleaseAddress(instId instance.Id, _ network.Id, addr network.Address) (err error) {
 	defer errors.DeferredAnnotatef(&err, "failed to release address %q from instance %q", addr, instId)
+
+	// If the instance ID is unknown the address has already been released
+	// and we can ignore this request.
+	if instId == instance.UnknownId {
+		logger.Debugf("release address %q with an unknown instance ID is a no-op (ignoring)", addr.Value)
+		return nil
+	}
 
 	var nicId string
 	ec2Inst := e.ec2()

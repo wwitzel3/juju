@@ -1,0 +1,11 @@
+--- provider/gce/google/zone.go
++++ provider/gce/google/zone.go
+@@ -5,6 +5,8 @@
+ 
+ import (
+ 	"code.google.com/p/google-api-go-client/compute/v1"
++
++	"github.com/juju/errors"
+ )
+ 
+ // AvailabilityZone represents a single GCE zone. It satisfies the

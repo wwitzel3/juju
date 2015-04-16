@@ -8,6 +8,7 @@ import (
 	"github.com/juju/names"
 
 	"github.com/juju/juju/api/base"
+	"github.com/juju/juju/api/common"
 	"github.com/juju/juju/api/watcher"
 	"github.com/juju/juju/apiserver/params"
 )
@@ -18,6 +19,8 @@ const storageProvisionerFacade = "StorageProvisioner"
 type State struct {
 	facade base.FacadeCaller
 	scope  names.Tag
+
+	*common.EnvironWatcher
 }
 
 // NewState creates a new client-side StorageProvisioner facade.
@@ -28,10 +31,33 @@ func NewState(caller base.APICaller, scope names.Tag) *State {
 	default:
 		panic(errors.Errorf("expected EnvironTag or MachineTag, got %T", scope))
 	}
+	facadeCaller := base.NewFacadeCaller(caller, storageProvisionerFacade)
 	return &State{
-		base.NewFacadeCaller(caller, storageProvisionerFacade),
+		facadeCaller,
 		scope,
+		common.NewEnvironWatcher(facadeCaller),
 	}
+}
+
+// WatchBlockDevices watches for changes to the specified machine's block devices.
+func (st *State) WatchBlockDevices(m names.MachineTag) (watcher.NotifyWatcher, error) {
+	var results params.NotifyWatchResults
+	args := params.Entities{
+		Entities: []params.Entity{{Tag: m.String()}},
+	}
+	err := st.facade.FacadeCall("WatchBlockDevices", args, &results)
+	if err != nil {
+		return nil, err
+	}
+	if len(results.Results) != 1 {
+		panic(errors.Errorf("expected 1 result, got %d", len(results.Results)))
+	}
+	result := results.Results[0]
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	w := watcher.NewNotifyWatcher(st.facade.RawAPICaller(), result)
+	return w, nil
 }
 
 // WatchVolumes watches for changes to volumes scoped to the
@@ -144,6 +170,21 @@ func (st *State) VolumeAttachments(ids []params.MachineStorageId) ([]params.Volu
 	args := params.MachineStorageIds{ids}
 	var results params.VolumeAttachmentResults
 	err := st.facade.FacadeCall("VolumeAttachments", args, &results)
+	if err != nil {
+		return nil, err
+	}
+	if len(results.Results) != len(ids) {
+		panic(errors.Errorf("expected %d result(s), got %d", len(ids), len(results.Results)))
+	}
+	return results.Results, nil
+}
+
+// VolumeBlockDevices returns details of block devices corresponding to the volume
+// attachments with the specified IDs.
+func (st *State) VolumeBlockDevices(ids []params.MachineStorageId) ([]params.BlockDeviceResult, error) {
+	args := params.MachineStorageIds{ids}
+	var results params.BlockDeviceResults
+	err := st.facade.FacadeCall("VolumeBlockDevices", args, &results)
 	if err != nil {
 		return nil, err
 	}

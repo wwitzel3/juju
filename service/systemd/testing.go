@@ -24,15 +24,15 @@ type WriteConfTest struct {
 }
 
 func (wct WriteConfTest) dirname() string {
-	return fmt.Sprintf("%s/init/%s", wct.DataDir, wct.Service)
+	return fmt.Sprintf("'%s/init/%s'", wct.DataDir, wct.Service)
 }
 
 func (wct WriteConfTest) filename() string {
-	return fmt.Sprintf("%[1]s/init/%[2]s/%[2]s.service", wct.DataDir, wct.Service)
+	return fmt.Sprintf("'%[1]s/init/%[2]s/%[2]s.service'", wct.DataDir, wct.Service)
 }
 
 func (wct WriteConfTest) scriptname() string {
-	return fmt.Sprintf("%s/init/%s/exec-start.sh", wct.DataDir, wct.Service)
+	return fmt.Sprintf("'%s/init/%s/exec-start.sh'", wct.DataDir, wct.Service)
 }
 
 // CheckCommands checks the given commands against the test's expectations.
@@ -47,7 +47,7 @@ func (wct WriteConfTest) CheckCommands(c *gc.C, commands []string) {
 }
 
 func (wct WriteConfTest) checkWriteExecScript(c *gc.C, commands []string) {
-	script := "#!/bin/bash\n\n" + wct.Script
+	script := "#!/usr/bin/env bash\n\n" + wct.Script
 	testing.CheckWriteFileCommand(c, commands[0], wct.scriptname(), script, nil)
 
 	// Check the remaining commands.
