@@ -5,13 +5,10 @@ package apiclient
 
 import (
 	"github.com/juju/errors"
-	"github.com/juju/loggo"
 
 	"github.com/juju/juju/api/base"
 	"github.com/juju/juju/procmanager"
 )
-
-var logger = loggo.GetLogger("juju.procmanager.api")
 
 type apiState interface {
 	base.APICallCloser

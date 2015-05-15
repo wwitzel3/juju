@@ -34,6 +34,7 @@ func NewAPI(st *state.State, resources *common.Resources, authorizer common.Auth
 	return &b, nil
 }
 
+// Add adds information about a new process to Juju's state.
 func (a *API) Add(args apiclient.ProcessInfo) (*apiclient.ProcessID, error) {
 	info := procmanager.ProcessInfo{
 		Image:      args.Image,
@@ -57,11 +58,13 @@ func (a *API) Add(args apiclient.ProcessInfo) (*apiclient.ProcessID, error) {
 	return &result, nil
 }
 
+// Remove removes information about an existing process from Juju's state.
 func (a *API) Remove(args apiclient.ProcessID) error {
 	err := procstate.Unregister(a.st, args.UUID)
 	return errors.Trace(err)
 }
 
+// Info retrieves information about an existing process from Juju's state.
 func (a *API) Info(args apiclient.ProcessID) (*apiclient.ProcessInfo, error) {
 	info, err := procstate.Info(a.st, args.UUID)
 	if err != nil {
