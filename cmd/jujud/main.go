@@ -24,6 +24,9 @@ import (
 	"github.com/juju/juju/juju/sockets"
 	// Import the providers.
 	_ "github.com/juju/juju/provider/all"
+	// Import juju modules.
+	_ "github.com/juju/juju/cmd/jujud/all"
+
 	"github.com/juju/juju/worker/uniter/runner/jujuc"
 )
 

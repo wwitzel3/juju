@@ -3,7 +3,12 @@
 
 package procmanager
 
-const ProcManagerAPI = "ProcManager"
+import (
+	"github.com/juju/juju/apiserver/common"
+	"github.com/juju/juju/state"
+)
+
+const ProcManager = "ProcManager"
 
 type CharmCmds interface {
 	// $ launch -> API.CharmHookEnv.Launch
@@ -26,7 +31,7 @@ type CharmCmds interface {
 
 type Launch interface {
 	Verify(storage, networking string) error
-	RegisterProcess(info processInfo) UUID
+	RegisterProcess(info processInfo) string
 }
 
 type Destroy interface {
@@ -75,7 +80,7 @@ type PluginResource interface {
 	// $ storage-info -> API.PluginResource.Storage
 	Storage(storageID string) (storageInfo, error)
 	// $ network-info -> API.PluginResource.Networking
-	Networking(networking string) (networkingInfo, error)
+	Networking(networking string) (networkInfo, error)
 }
 
 // OLD STUFF
