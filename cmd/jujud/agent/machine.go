@@ -815,14 +815,18 @@ func (a *MachineAgent) postUpgradeAPIWorker(
 		}
 	}
 
-	if err := a.startWorker(runner, "proc-manager"); err != nil {
+	if err := startWorker("proc-status", st, runner); err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	if err := startWorker("proc-watcher", st, runner); err != nil {
 		return nil, errors.Trace(err)
 	}
 
 	return cmdutil.NewCloseWorker(logger, runner, st), nil // Note: a worker.Runner is itself a worker.Worker.
 }
 
-type newWorkerFunc func() (worker.Worker, error)
+type newWorkerFunc func(st *api.State) (worker.Worker, error)
 
 var registeredWorkers = map[string]newWorkerFunc{}
 
@@ -837,12 +841,25 @@ func RegisterWorker(name string, newWorker newWorkerFunc) error {
 	return nil
 }
 
-func (a *MachineAgent) startWorker(runner worker.Runner, name string) error {
+// RegisterSimpleWorker adds a newWorker func to the registery of workers.
+func RegisterSimpleWorker(name string, newLoop func(*api.State) (func(<-chan struct{}) error, error)) error {
+	return RegisterWorker(name, func(st *api.State) (worker.Worker, error) {
+		workerLoop, err := newLoop(st)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		return worker.NewSimpleWorker(workerLoop), nil
+	})
+}
+
+func startWorker(name string, st *api.State, runner worker.Runner) error {
 	newWorker, ok := registeredWorkers[name]
 	if !ok {
 		return errors.NotFoundf("newWorker func for %q", name)
 	}
-	runner.StartWorker(name, newWorker)
+	runner.StartWorker(name, func() (worker.Worker, error) {
+		return newWorker(st)
+	})
 	return nil
 }
 
