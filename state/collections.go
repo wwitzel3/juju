@@ -6,12 +6,108 @@ package state
 import (
 	"strings"
 
+	"github.com/juju/errors"
 	"github.com/juju/utils/set"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
+	"gopkg.in/mgo.v2/txn"
 
 	"github.com/juju/juju/mongo"
 )
+
+// CollectionHandler defines the interface for modules to inform state about
+// to handle operations for a collection.
+type CollectionHandler interface {
+	// ConvertIn converts the given data in to the given doc.
+	ConvertIn(doc, data interface{}) error
+	// ConvertOut converts the given doc in to the given data.
+	ConvertOut(data, doc interface{}) error
+	// NewId generates a new document ID.
+	NewId(envUUID string, data interface{}) (string, error)
+}
+
+// GetOne returns a single document for the requested docID and collection.
+// GetOne uses the collection handler to ensure the results are converted properly.
+func (st *State) GetOne(collection, docID string, result interface{}) error {
+	handler, err := getCollectionHandler(collection)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	coll, closer := st.getCollection(collection)
+	defer closer()
+
+	var doc interface{}
+	if err := coll.FindId(docID).One(&doc); err != nil {
+		return errors.Trace(err)
+	}
+
+	return errors.Trace(handler.ConvertOut(result, doc))
+}
+
+// InsertOne inserts a doc for the given data. InsertOne uses the
+// collection handler to generate the docID and ensure the data is
+// converted properly.
+func (st *State) InsertOne(collection, envUUID string, data interface{}) (string, error) {
+	handler, err := getCollectionHandler(collection)
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+
+	var doc interface{}
+	if err := handler.ConvertIn(doc, data); err != nil {
+		return "", errors.Trace(err)
+	}
+
+	id, err := handler.NewId(envUUID, data)
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+
+	ops := []txn.Op{{
+		C:      collection,
+		Id:     id,
+		Assert: txn.DocMissing,
+		Insert: doc,
+	}}
+
+	if err := st.runTransaction(ops); err != nil {
+		return "", errors.Trace(err)
+	}
+
+	return id, nil
+}
+
+// RemoveOne removes a doc of the requested docID.
+func (st *State) RemoveOne(collection, docID string) error {
+	ops := []txn.Op{{
+		C:      collection,
+		Id:     docID,
+		Remove: true,
+		Assert: txn.DocExists,
+	}}
+
+	return errors.Trace(st.runTransaction(ops))
+}
+
+var stateCollectionHandlers = map[string]CollectionHandler{}
+
+// RegisterCollectionHandler allows a module to register a CollectionHandler implementation.
+func RegisterCollectionHandler(collection string, handler CollectionHandler) error {
+	if _, ok := stateCollectionHandlers[collection]; ok {
+		return errors.AlreadyExistsf("collection handler for %q", collection)
+	}
+	stateCollectionHandlers[collection] = handler
+	return nil
+}
+
+func getCollectionHandler(collection string) (CollectionHandler, error) {
+	handler, ok := stateCollectionHandlers[collection]
+	if !ok {
+		return nil, errors.NotFoundf("collection handler for %q", collection)
+	}
+	return handler, nil
+}
 
 // getCollection fetches a named collection using a new session if the
 // database has previously been logged in to. It returns the
@@ -81,6 +177,7 @@ var multiEnvCollections = set.NewStrings(
 	networkInterfacesC,
 	networksC,
 	openedPortsC,
+	ProcessesC,
 	rebootC,
 	relationScopesC,
 	relationsC,
