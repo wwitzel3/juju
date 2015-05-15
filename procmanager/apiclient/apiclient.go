@@ -35,8 +35,8 @@ func NewClient(st apiState) *Client {
 
 // Add adds information about a launch process to state.
 func (c *Client) Add(info procmanager.ProcessInfo) (string, error) {
-	var result string
-	args := AddArgs{
+	var result ProcessID
+	args := ProcessInfo{
 		Image:      info.Image,
 		Args:       info.Args,
 		Desc:       info.Desc,
@@ -49,17 +49,36 @@ func (c *Client) Add(info procmanager.ProcessInfo) (string, error) {
 	if err := c.facade.FacadeCall("Add", args, &result); err != nil {
 		return "", errors.Trace(err)
 	}
-	return result, nil
+	return result.UUID, nil
 }
 
 // Remove removes information about a launch process to state.
-func (c *Client) Remove() string {
-	// make facadecall call with params, return params
-	return ""
+func (c *Client) Remove(uuid string) error {
+	args := ProcessID{UUID: uuid}
+	if err := c.facade.FacadeCall("Remove", args, nil); err != nil {
+		return errors.Trace(err)
+	}
+	return nil
 }
 
 // Info retrieves the information about a launch process from state.
-func (c *Client) Info() string {
-	// make facadecall call with params, return params
-	return ""
+func (c *Client) Info(uuid string) (*procmanager.ProcessInfo, error) {
+	var result ProcessInfo
+	args := ProcessID{UUID: uuid}
+	if err := c.facade.FacadeCall("Info", args, &result); err != nil {
+		return nil, errors.Trace(err)
+	}
+	info := procmanager.ProcessInfo{
+		Image:      result.Image,
+		Args:       result.Args,
+		Desc:       result.Desc,
+		Plugin:     result.Plugin,
+		Storage:    result.Storage,
+		Networking: result.Networking,
+		Details: procmanager.ProcessDetails{
+			UniqueID: result.UniqueID,
+			Status:   result.Status,
+		},
+	}
+	return &info, nil
 }

@@ -6,5 +6,5 @@
 package all
 
 import (
-	_ "github.com/juju/juju/procmanager"
+	_ "github.com/juju/juju/procmanager/all"
 )

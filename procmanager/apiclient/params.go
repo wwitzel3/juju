@@ -1,6 +1,6 @@
 package apiclient
 
-type AddArgs struct {
+type ProcessInfo struct {
 	Image  string
 	Args   string
 	Desc   string
@@ -15,11 +15,6 @@ type AddArgs struct {
 	Status   string
 }
 
-type RemoveArgs struct {
-}
-
-type InfoArgs struct {
-}
-
-type InfoResult struct {
+type ProcessID struct {
+	UUID string
 }
