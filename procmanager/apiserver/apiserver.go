@@ -48,7 +48,7 @@ func (a *API) Add(args apiclient.ProcessInfo) (*apiclient.ProcessID, error) {
 			Status:   args.Status,
 		},
 	}
-	uuid, err := procstate.Register(a.st, info)
+	uuid, err := procstate.Register(a.st, &info)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
