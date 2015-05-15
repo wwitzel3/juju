@@ -3,18 +3,13 @@
 
 package procmanager
 
-import (
-	"github.com/juju/juju/apiserver/common"
-	"github.com/juju/juju/state"
-)
-
 const ProcManager = "ProcManager"
 
 type CharmCmds interface {
 	// $ launch -> API.CharmHookEnv.Launch
 	// valid arg parse
-	// verify storage and networking with state
 	// exec plugin with validated arguments
+	//     -> plugin will use PluginResources to verify storage and networking
 	// handle any plugin errors
 	// convert unique identifier in to UUID for process
 	// register UUID and process information with state
@@ -30,42 +25,41 @@ type CharmCmds interface {
 }
 
 type Launch interface {
-	Verify(storage, networking string) error
-	RegisterProcess(info processInfo) string
+	RegisterProcess(info ProcessInfo) string
 }
 
 type Destroy interface {
-	Info(UUID string) (processInfo, error)
+	Info(UUID string) (ProcessInfo, error)
 	UnregisterProcess(UUID string) error
 }
 
 type Plugin interface {
-	Launch(image, desc, storage, networking, args string) (processDetails, error)
+	Launch(image, desc, storage, networking, args string) (ProcessDetails, error)
 	Destroy(UUID string) error
 }
 
 // processDetails holds information about the process that only the plugin
 // can determine.
-type processDetails struct {
+type ProcessDetails struct {
 	// uniqueID is provided by the plugin as a guaranteed way
 	// to identify the process.
-	uniqueID string
+	UniqueID string
 	// status of the process
-	status string
+	Status string
 }
 
 // processInfo holds information about a process that Juju needs.
-type processInfo struct {
-	image  string
-	args   string
-	desc   string
-	plugin string
+type ProcessInfo struct {
+	Image  string
+	Args   string
+	Desc   string
+	Plugin string
 
 	// TODO(wwitzel3) determine specific details for storage and networking
-	storage    string
-	networking string
+	Storage    string
+	Networking string
 
-	details processDetails
+	Details ProcessDetails
 }
 
 // TODO(wwitzel3) determine storageInfo based on spec/plugin needs
@@ -81,36 +75,4 @@ type PluginResource interface {
 	Storage(storageID string) (storageInfo, error)
 	// $ network-info -> API.PluginResource.Networking
 	Networking(networking string) (networkInfo, error)
-}
-
-// OLD STUFF
-//
-func init() {
-	common.RegisterStandardFacade("ProcManager", 1, NewProcManagerAPI)
-}
-
-// ProcManagerAPI implements the API used by the procmanager worker.
-type ProcManagerAPI struct {
-	*common.EnvironWatcher
-
-	st             *state.State
-	resources      *common.Resources
-	authorizer     common.Authorizer
-	StateAddresser *common.StateAddresser
-	canModify      bool
-}
-
-// NewProcManagerAPI creates a new instance of the ProcManager API.
-func NewProcManagerAPI(st *state.State, resources *common.Resources, authorizer common.Authorizer) (*ProcManagerAPI, error) {
-	if !authorizer.AuthMachineAgent() && !authorizer.AuthUnitAgent() {
-		return nil, common.ErrPerm
-	}
-	return &ProcManagerAPI{
-		EnvironWatcher: common.NewEnvironWatcher(st, resources, authorizer),
-		st:             st,
-		authorizer:     authorizer,
-		resources:      resources,
-		canModify:      authorizer.AuthEnvironManager(),
-		StateAddresser: common.NewStateAddresser(st),
-	}, nil
 }
