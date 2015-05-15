@@ -8,4 +8,6 @@ import (
 	_ "github.com/juju/juju/procmanager/apiserver"
 	// Ensure we register procmanager commands.
 	_ "github.com/juju/juju/procmanager/commands"
+	// Ensure we register the worker.
+	_ "github.com/juju/juju/procmanager/worker"
 )

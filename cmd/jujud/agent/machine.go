@@ -815,7 +815,35 @@ func (a *MachineAgent) postUpgradeAPIWorker(
 		}
 	}
 
+	if err := a.startWorker(runner, "proc-manager"); err != nil {
+		return nil, errors.Trace(err)
+	}
+
 	return cmdutil.NewCloseWorker(logger, runner, st), nil // Note: a worker.Runner is itself a worker.Worker.
+}
+
+type newWorkerFunc func() (worker.Worker, error)
+
+var registeredWorkers = map[string]newWorkerFunc{}
+
+// TODO(ericsnow) Add "runlevel" support in RegisterWorker.
+
+// RegisterWorker adds a newWorker func to the registery of workers.
+func RegisterWorker(name string, newWorker newWorkerFunc) error {
+	if _, ok := registeredWorkers[name]; ok {
+		return errors.AlreadyExistsf("newWorker func for %q", name)
+	}
+	registeredWorkers[name] = newWorker
+	return nil
+}
+
+func (a *MachineAgent) startWorker(runner worker.Runner, name string) error {
+	newWorker, ok := registeredWorkers[name]
+	if !ok {
+		return errors.NotFoundf("newWorker func for %q", name)
+	}
+	runner.StartWorker(name, newWorker)
+	return nil
 }
 
 // Restart restarts the agent's service.
