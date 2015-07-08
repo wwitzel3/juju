@@ -40,16 +40,15 @@ func (c workloadProcesses) registerHookContext() {
 		return
 	}
 
-	runner.RegisterComponentFunc(process.ComponentName,
-		func(caller base.APICaller, authTag names.Tag) (jujuc.ContextComponent, error) {
-			facadeCaller := base.NewFacadeCallerForVersion(caller, authTag.String(), 0)
-			hctxClient := client.NewHookContextClient(facadeCaller)
-			component, err := context.NewContextAPI(hctxClient)
-			if err != nil {
-				return nil, errors.Trace(err)
-			}
-			return component, nil
-		},
+	runner.RegisterComponentFunc(process.ComponentName, func(caller base.APICaller) (jujuc.ContextComponent, error) {
+		facadeCaller := base.NewFacadeCallerForVersion(caller, process.ComponentName, 0)
+		hctxClient := client.NewHookContextClient(facadeCaller)
+		component, err := context.NewContextAPI(hctxClient)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		return component, nil
+	},
 	)
 
 	c.registerHookContextCommands()
@@ -74,7 +73,7 @@ func (c workloadProcesses) registerHookContextFacade() {
 		process.ComponentName,
 		0,
 		newHookContextApi,
-		reflect.TypeOf(server.HookContextAPI{}),
+		reflect.TypeOf(&server.HookContextAPI{}),
 	)
 }
 

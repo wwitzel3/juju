@@ -48,6 +48,10 @@ func (c HookContextClient) ListProcesses(ids ...string) ([]api.ListProcessResult
 		return nil, errors.Trace(err)
 	}
 
+	if result.Error != nil {
+		return nil, errors.Errorf(result.Error.GoString())
+	}
+
 	return result.Results, nil
 }
 
@@ -87,6 +91,10 @@ func (c HookContextClient) Get(ids ...string) ([]*process.Info, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	if len(results) == 0 {
+		return nil, errors.Errorf("ListProcesses results 0")
+	}
+
 	procs := make([]*process.Info, len(results))
 	for i, presult := range results {
 		pp := api.API2Proc(presult.Info)
