@@ -7,11 +7,10 @@ import (
 	"errors"
 	"strings"
 
-	gc "gopkg.in/check.v1"
-
 	jc "github.com/juju/testing/checkers"
 	"github.com/juju/utils/exec"
 	"github.com/juju/utils/os"
+	gc "gopkg.in/check.v1"
 
 	"github.com/juju/juju/cloudconfig"
 	"github.com/juju/juju/testing"
@@ -27,6 +26,7 @@ var _ = gc.Suite(&steps125Suite{})
 
 func (s *steps125Suite) TestStateStepsFor125(c *gc.C) {
 	expected := []string{
+		"add the version field to all settings docs",
 		"set hosted environment count to number of hosted environments",
 		"tag machine instances",
 		"add missing env-uuid to statuses",

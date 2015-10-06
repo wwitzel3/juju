@@ -18,13 +18,12 @@ import (
 	jc "github.com/juju/testing/checkers"
 	"github.com/juju/utils"
 	gc "gopkg.in/check.v1"
-	"gopkg.in/juju/charm.v5"
-	"gopkg.in/juju/charm.v5/charmrepo"
-	"gopkg.in/juju/charmstore.v4"
-	"gopkg.in/juju/charmstore.v4/charmstoretesting"
-	"gopkg.in/juju/charmstore.v4/csclient"
-	"gopkg.in/macaroon-bakery.v0/bakery/checkers"
-	"gopkg.in/macaroon-bakery.v0/bakerytest"
+	"gopkg.in/juju/charm.v6-unstable"
+	"gopkg.in/juju/charmrepo.v1"
+	"gopkg.in/juju/charmrepo.v1/csclient"
+	"gopkg.in/juju/charmstore.v5-unstable"
+	"gopkg.in/macaroon-bakery.v1/bakery/checkers"
+	"gopkg.in/macaroon-bakery.v1/bakerytest"
 
 	"github.com/juju/juju/api"
 	"github.com/juju/juju/apiserver/params"
@@ -66,13 +65,10 @@ var initErrorTests = []struct {
 }{
 	{
 		args: nil,
-		err:  `no charm specified`,
+		err:  `no charm or bundle specified`,
 	}, {
 		args: []string{"charm-name", "service-name", "hotdog"},
 		err:  `unrecognized args: \["hotdog"\]`,
-	}, {
-		args: []string{"craz~ness"},
-		err:  `invalid charm name "craz~ness"`,
 	}, {
 		args: []string{"craziness", "burble-1"},
 		err:  `invalid service name "burble-1"`,
@@ -98,7 +94,7 @@ func (s *DeploySuite) TestInitErrors(c *gc.C) {
 
 func (s *DeploySuite) TestNoCharm(c *gc.C) {
 	err := runDeploy(c, "local:unknown-123")
-	c.Assert(err, gc.ErrorMatches, `charm not found in ".*": local:trusty/unknown-123`)
+	c.Assert(err, gc.ErrorMatches, `entity not found in ".*": local:trusty/unknown-123`)
 }
 
 func (s *DeploySuite) TestBlockDeploy(c *gc.C) {
@@ -430,22 +426,71 @@ var deployAuthorizationTests = []struct {
 	uploadURL:    "cs:~bob/trusty/wordpress5-10",
 	deployURL:    "cs:~bob/trusty/wordpress5",
 	readPermUser: "bob",
-	expectError:  `cannot resolve charm URL "cs:~bob/trusty/wordpress5": cannot get "/~bob/trusty/wordpress5/meta/any\?include=id": unauthorized: access denied for user "client-username"`,
+	expectError:  `cannot resolve (charm )?URL "cs:~bob/trusty/wordpress5": cannot get "/~bob/trusty/wordpress5/meta/any\?include=id": unauthorized: access denied for user "client-username"`,
 }, {
 	about:        "non-public charm, fully resolved, access denied",
 	uploadURL:    "cs:~bob/trusty/wordpress6-47",
 	deployURL:    "cs:~bob/trusty/wordpress6-47",
 	readPermUser: "bob",
 	expectError:  `cannot retrieve charm "cs:~bob/trusty/wordpress6-47": cannot get archive: unauthorized: access denied for user "client-username"`,
+}, {
+	about:     "public bundle, success",
+	uploadURL: "cs:~bob/bundle/wordpress-simple1-42",
+	deployURL: "cs:~bob/bundle/wordpress-simple1",
+	expectOutput: `
+added charm cs:trusty/mysql-0
+service mysql deployed (charm: cs:trusty/mysql-0)
+added charm cs:trusty/wordpress-1
+service wordpress deployed (charm: cs:trusty/wordpress-1)
+related wordpress:db and mysql:server
+added mysql/0 unit to new machine
+added wordpress/0 unit to new machine
+deployment of bundle "cs:~bob/bundle/wordpress-simple1-42" completed`,
+}, {
+	about:        "non-public bundle, success",
+	uploadURL:    "cs:~bob/bundle/wordpress-simple2-0",
+	deployURL:    "cs:~bob/bundle/wordpress-simple2-0",
+	readPermUser: clientUserName,
+	expectOutput: `
+added charm cs:trusty/mysql-0
+reusing service mysql (charm: cs:trusty/mysql-0)
+added charm cs:trusty/wordpress-1
+reusing service wordpress (charm: cs:trusty/wordpress-1)
+wordpress:db and mysql:server are already related
+avoid adding new units to service mysql: 1 unit already present
+avoid adding new units to service wordpress: 1 unit already present
+deployment of bundle "cs:~bob/bundle/wordpress-simple2-0" completed`,
+}, {
+	about:        "non-public bundle, access denied",
+	uploadURL:    "cs:~bob/bundle/wordpress-simple3-47",
+	deployURL:    "cs:~bob/bundle/wordpress-simple3",
+	readPermUser: "bob",
+	expectError:  `cannot resolve charm URL "cs:~bob/bundle/wordpress-simple3": cannot get "/~bob/bundle/wordpress-simple3/meta/any\?include=id": unauthorized: access denied for user "client-username"`,
 }}
 
 func (s *DeployCharmStoreSuite) TestDeployAuthorization(c *gc.C) {
+	// Upload the two charms required to upload the bundle.
+	testcharms.UploadCharm(c, s.client, "trusty/mysql-0", "mysql")
+	testcharms.UploadCharm(c, s.client, "trusty/wordpress-1", "wordpress")
+
+	// Run the tests.
 	for i, test := range deployAuthorizationTests {
 		c.Logf("test %d: %s", i, test.about)
-		url, _ := s.uploadCharm(c, test.uploadURL, "wordpress")
+
+		// Upload the charm or bundle under test.
+		url := charm.MustParseURL(test.uploadURL)
+		if url.Series == "bundle" {
+			url, _ = testcharms.UploadBundle(c, s.client, test.uploadURL, "wordpress-simple")
+		} else {
+			url, _ = testcharms.UploadCharm(c, s.client, test.uploadURL, "wordpress")
+		}
+
+		// Change the ACL of the uploaded entity if required in this case.
 		if test.readPermUser != "" {
 			s.changeReadPerm(c, url, test.readPermUser)
 		}
+
+		// Deploy the entity and check output or possible errors.
 		ctx, err := coretesting.RunCommand(c, envcmd.Wrap(&DeployCommand{}), test.deployURL, fmt.Sprintf("wordpress%d", i))
 		if test.expectError != "" {
 			c.Assert(err, gc.ErrorMatches, test.expectError)
@@ -453,7 +498,7 @@ func (s *DeployCharmStoreSuite) TestDeployAuthorization(c *gc.C) {
 		}
 		c.Assert(err, jc.ErrorIsNil)
 		output := strings.Trim(coretesting.Stderr(ctx), "\n")
-		c.Assert(output, gc.Equals, test.expectOutput)
+		c.Assert(output, gc.Equals, strings.TrimSpace(test.expectOutput))
 	}
 }
 
@@ -472,7 +517,9 @@ const (
 // place to allow testing code that calls addCharmViaAPI.
 type charmStoreSuite struct {
 	testing.JujuConnSuite
-	srv        *charmstoretesting.Server
+	handler    charmstore.HTTPCloseHandler
+	srv        *httptest.Server
+	client     *csclient.Client
 	discharger *bakerytest.Discharger
 }
 
@@ -483,7 +530,7 @@ func (s *charmStoreSuite) SetUpTest(c *gc.C) {
 	s.discharger = bakerytest.NewDischarger(nil, func(req *http.Request, cond string, arg string) ([]checkers.Caveat, error) {
 		cookie, err := req.Cookie(clientUserCookie)
 		if err != nil {
-			return nil, errors.New("discharge denied to non-clients")
+			return nil, errors.Annotate(err, "discharge denied to non-clients")
 		}
 		return []checkers.Caveat{
 			checkers.DeclaredCaveat("username", cookie.Value),
@@ -491,9 +538,21 @@ func (s *charmStoreSuite) SetUpTest(c *gc.C) {
 	})
 
 	// Set up the charm store testing server.
-	s.srv = charmstoretesting.OpenServer(c, s.Session, charmstore.ServerParams{
+	db := s.Session.DB("juju-testing")
+	params := charmstore.ServerParams{
+		AuthUsername:     "test-user",
+		AuthPassword:     "test-password",
 		IdentityLocation: s.discharger.Location(),
 		PublicKeyLocator: s.discharger,
+	}
+	handler, err := charmstore.NewServer(db, nil, "", params, charmstore.V4)
+	c.Assert(err, jc.ErrorIsNil)
+	s.handler = handler
+	s.srv = httptest.NewServer(handler)
+	s.client = csclient.New(csclient.Params{
+		URL:      s.srv.URL,
+		User:     params.AuthUsername,
+		Password: params.AuthPassword,
 	})
 
 	// Initialize the charm cache dir.
@@ -506,7 +565,7 @@ func (s *charmStoreSuite) SetUpTest(c *gc.C) {
 		if err != nil {
 			return nil, err
 		}
-		csclient.params.URL = s.srv.URL()
+		csclient.params.URL = s.srv.URL
 		// Add a cookie so that the discharger can detect whether the
 		// HTTP client is the juju environment or the juju client.
 		lurl, err := url.Parse(s.discharger.Location())
@@ -521,33 +580,90 @@ func (s *charmStoreSuite) SetUpTest(c *gc.C) {
 	})
 
 	// Point the Juju API server to the charm store testing server.
-	s.PatchValue(&csclient.ServerURL, s.srv.URL())
+	s.PatchValue(&csclient.ServerURL, s.srv.URL)
 }
 
 func (s *charmStoreSuite) TearDownTest(c *gc.C) {
 	s.discharger.Close()
+	s.handler.Close()
 	s.srv.Close()
 	s.JujuConnSuite.TearDownTest(c)
-}
-
-// uploadCharm adds a charm with the given URL and name to the charm store.
-func (s *charmStoreSuite) uploadCharm(c *gc.C, url, name string) (*charm.URL, charm.Charm) {
-	id := charm.MustParseReference(url)
-	promulgated := false
-	if id.User == "" {
-		id.User = "who"
-		promulgated = true
-	}
-	ch := testcharms.Repo.CharmArchive(c.MkDir(), name)
-	id = s.srv.UploadCharm(c, ch, id, promulgated)
-	return (*charm.URL)(id), ch
 }
 
 // changeReadPerm changes the read permission of the given charm URL.
 // The charm must be present in the testing charm store.
 func (s *charmStoreSuite) changeReadPerm(c *gc.C, url *charm.URL, perms ...string) {
-	err := s.srv.NewClient().Put("/"+url.Path()+"/meta/perm/read", perms)
+	err := s.client.Put("/"+url.Path()+"/meta/perm/read", perms)
 	c.Assert(err, jc.ErrorIsNil)
+}
+
+// assertCharmsUplodaded checks that the given charm ids have been uploaded.
+func (s *charmStoreSuite) assertCharmsUplodaded(c *gc.C, ids ...string) {
+	charms, err := s.State.AllCharms()
+	c.Assert(err, jc.ErrorIsNil)
+	uploaded := make([]string, len(charms))
+	for i, charm := range charms {
+		uploaded[i] = charm.URL().String()
+	}
+	c.Assert(uploaded, jc.SameContents, ids)
+}
+
+// serviceInfo holds information about a deployed service.
+type serviceInfo struct {
+	charm       string
+	config      charm.Settings
+	constraints constraints.Value
+}
+
+// assertServicesDeployed checks that the given services have been deployed.
+func (s *charmStoreSuite) assertServicesDeployed(c *gc.C, info map[string]serviceInfo) {
+	services, err := s.State.AllServices()
+	c.Assert(err, jc.ErrorIsNil)
+	deployed := make(map[string]serviceInfo, len(services))
+	for _, service := range services {
+		charm, _ := service.CharmURL()
+		config, err := service.ConfigSettings()
+		c.Assert(err, jc.ErrorIsNil)
+		if len(config) == 0 {
+			config = nil
+		}
+		constraints, err := service.Constraints()
+		c.Assert(err, jc.ErrorIsNil)
+		deployed[service.Name()] = serviceInfo{
+			charm:       charm.String(),
+			config:      config,
+			constraints: constraints,
+		}
+	}
+	c.Assert(deployed, jc.DeepEquals, info)
+}
+
+// assertRelationsEstablished checks that the given relations have been set.
+func (s *charmStoreSuite) assertRelationsEstablished(c *gc.C, relations ...string) {
+	rs, err := s.State.AllRelations()
+	c.Assert(err, jc.ErrorIsNil)
+	established := make([]string, len(rs))
+	for i, r := range rs {
+		established[i] = r.String()
+	}
+	c.Assert(established, jc.SameContents, relations)
+}
+
+// assertUnitsCreated checks that the given units have been created. The
+// expectedUnits argument maps unit names to machine names.
+func (s *charmStoreSuite) assertUnitsCreated(c *gc.C, expectedUnits map[string]string) {
+	machines, err := s.State.AllMachines()
+	c.Assert(err, jc.ErrorIsNil)
+	created := make(map[string]string)
+	for _, m := range machines {
+		id := m.Id()
+		units, err := s.State.UnitsFor(id)
+		c.Assert(err, jc.ErrorIsNil)
+		for _, u := range units {
+			created[u.Name()] = id
+		}
+	}
+	c.Assert(created, jc.DeepEquals, expectedUnits)
 }
 
 type testMetricCredentialsSetter struct {
