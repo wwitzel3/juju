@@ -111,6 +111,11 @@ func (st resourceState) Persistence() (state.Persistence, error) {
 	return persistence.NewPersistence(st.persist), nil
 }
 
+// Storage implements resource/state.RawState.
+func (st resourceState) Storage() (state.Storage, error) {
+	return st.persist.NewStorage(), nil
+}
+
 // registerPublicCommands adds the resources-related commands
 // to the "juju" supercommand.
 func (r resources) registerPublicCommands() {
