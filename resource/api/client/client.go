@@ -5,10 +5,12 @@ package client
 
 import (
 	"io"
+	"net/http"
 
 	"github.com/juju/errors"
 	"github.com/juju/loggo"
 
+	"github.com/juju/juju/apiserver/httpattachment"
 	"github.com/juju/juju/resource"
 	"github.com/juju/juju/resource/api"
 )
@@ -22,17 +24,24 @@ type FacadeCaller interface {
 	FacadeCall(request string, params, response interface{}) error
 }
 
+// Doer
+type Doer interface {
+	Do(req *http.Request, body io.ReadSeeker, resp interface{}) error
+}
+
 // Client is the public client for the resources API facade.
 type Client struct {
 	FacadeCaller
 	io.Closer
+	doer Doer
 }
 
 // NewClient returns a new Client for the given raw API caller.
-func NewClient(caller FacadeCaller, closer io.Closer) *Client {
+func NewClient(caller FacadeCaller, doer Doer, closer io.Closer) *Client {
 	return &Client{
 		FacadeCaller: caller,
 		Closer:       closer,
+		doer:         doer,
 	}
 }
 
@@ -70,7 +79,26 @@ func (c Client) ListResources(services []string) ([][]resource.Resource, error) 
 	return results, nil
 }
 
-func (c Client) Upload(service, name string, resource io.Reader) error {
-	// TODO(natefinch): implement this
-	return errors.NewNotImplemented(nil, "resources.Client.Upload is not implemented")
+func (c Client) Upload(service, name string, reader io.ReadSeeker) error {
+	// hash resource
+	// upload resource
+
+	args, err := api.NewUploadArgs(service, name)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	req, err := http.NewRequest("PUT", "/"+resource.ComponentName, nil)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	body, contentType, err := httpattachment.NewBody(reader, args, "juju-resource-"+service+"-"+name)
+	if err != nil {
+		return errors.Annotatef(err, "cannot create multipart body")
+	}
+	req.Header.Set("Content-Type", contentType)
+	if err := c.doer.Do(req, body, nil); err != nil {
+		return errors.Trace(err)
+	}
+	return nil
 }
