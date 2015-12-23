@@ -4,7 +4,13 @@
 package api
 
 import (
+	"io"
 	"time"
+
+	"github.com/juju/errors"
+	"github.com/juju/names"
+
+	"github.com/juju/juju/apiserver/params"
 )
 
 // Resource contains info about a Resource.
@@ -41,4 +47,41 @@ type CharmResource struct {
 
 	// Fingerprint is the SHA-384 checksum for the resource blob.
 	Fingerprint []byte `json:"fingerprint"`
+}
+
+type UploadEntity struct {
+	Tag  string
+	Name string
+	Blob io.Reader
+}
+
+type UploadArgs struct {
+	Entities []UploadEntity
+}
+
+// NewUploadArgs returns the arguments for the Upload endpoint.
+func NewUploadArgs(service string, name string, blob io.Reader) (UploadArgs, error) {
+	var args UploadArgs
+	if !names.IsValidService(service) {
+		return args, errors.Errorf("invalid service %q", service)
+	}
+
+	args.Entities = append(args.Entities, UploadEntity{
+		Tag:  names.NewServiceTag(service).String(),
+		Name: name,
+		Blob: blob,
+	})
+	return args, nil
+}
+
+type UploadResults struct {
+	Results []UploadResult
+}
+
+type UploadResult struct {
+	params.ErrorResult
+}
+
+func NewUploadResult(tag string, name string, blob io.Reader) (UploadResult, error) {
+	return UploadResult{}, nil
 }
