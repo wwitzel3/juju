@@ -4,10 +4,15 @@
 package all
 
 import (
+	"io"
+	"os"
+
 	"github.com/juju/errors"
 	"gopkg.in/juju/charm.v6-unstable"
+	charmresource "gopkg.in/juju/charm.v6-unstable/resource"
+	"gopkg.in/juju/charmrepo.v2-unstable"
 
-	coreapi "github.com/juju/juju/api"
+	"github.com/juju/juju/api"
 	"github.com/juju/juju/api/base"
 	"github.com/juju/juju/apiserver/common"
 	"github.com/juju/juju/cmd/envcmd"
@@ -16,9 +21,9 @@ import (
 	"github.com/juju/juju/resource/api/client"
 	"github.com/juju/juju/resource/api/server"
 	"github.com/juju/juju/resource/cmd"
+	"github.com/juju/juju/resource/persistence"
 	"github.com/juju/juju/resource/state"
 	corestate "github.com/juju/juju/state"
-	"github.com/juju/juju/state/utils"
 )
 
 // resources exposes the registration methods needed
@@ -28,6 +33,7 @@ type resources struct{}
 // RegisterForServer is the top-level registration method
 // for the component in a jujud context.
 func (r resources) registerForServer() error {
+	r.registerState()
 	r.registerPublicFacade()
 	return nil
 }
@@ -42,6 +48,10 @@ func (r resources) registerForClient() error {
 // registerPublicFacade adds the resources public API facade
 // to the API server.
 func (r resources) registerPublicFacade() {
+	if !markRegistered(resource.ComponentName, "public-facade") {
+		return
+	}
+
 	common.RegisterStandardFacade(
 		resource.ComponentName,
 		server.Version,
@@ -56,23 +66,13 @@ func (resources) newPublicFacade(st *corestate.State, _ *common.Resources, autho
 		return nil, common.ErrPerm
 	}
 
-	rst := state.NewState(&resourceState{raw: st})
-	return server.NewFacade(rst), nil
-}
-
-// resourceState is a wrapper around state.State that supports the needs
-// of resources.
-type resourceState struct {
-	raw *corestate.State
-}
-
-// CharmMetadata implements resource/state.RawState.
-func (st resourceState) CharmMetadata(serviceID string) (*charm.Meta, error) {
-	meta, err := utils.CharmMetadata(st.raw, serviceID)
+	rst, err := st.Resources()
+	//rst, err := state.NewState(&resourceState{raw: st})
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	return meta, nil
+
+	return server.NewFacade(rst), nil
 }
 
 // resourcesApiClient adds a Close() method to the resources public API client.
@@ -86,17 +86,37 @@ func (client resourcesAPIClient) Close() error {
 	return client.closeConnFunc()
 }
 
-// newAPIClient builds a new resources public API client from
-// the provided API caller.
-func (resources) newAPIClient(apiCaller coreapi.Connection) (*resourcesAPIClient, error) {
-	caller := base.NewFacadeCallerForVersion(apiCaller, resource.ComponentName, server.Version)
-
-	cl := &resourcesAPIClient{
-		Client:        client.NewClient(caller),
-		closeConnFunc: apiCaller.Close,
+// registerState registers the state functionality for resources.
+func (resources) registerState() {
+	if !markRegistered(resource.ComponentName, "state") {
+		return
 	}
 
-	return cl, nil
+	newResources := func(persist corestate.Persistence) (corestate.Resources, error) {
+		st, err := state.NewState(&resourceState{persist: persist})
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		return st, nil
+	}
+
+	corestate.SetResourcesComponent(newResources)
+}
+
+// resourceState is a wrapper around state.State that supports the needs
+// of resources.
+type resourceState struct {
+	persist corestate.Persistence
+}
+
+// Persistence implements resource/state.RawState.
+func (st resourceState) Persistence() (state.Persistence, error) {
+	return persistence.NewPersistence(st.persist), nil
+}
+
+// Storage implements resource/state.RawState.
+func (st resourceState) Storage() (state.Storage, error) {
+	return st.persist.NewStorage(), nil
 }
 
 // registerPublicCommands adds the resources-related commands
@@ -107,15 +127,62 @@ func (r resources) registerPublicCommands() {
 	}
 
 	newShowAPIClient := func(command *cmd.ShowCommand) (cmd.CharmResourceLister, error) {
-		//apiCaller, err := command.NewAPIRoot()
-		//if err != nil {
-		//	return nil, errors.Trace(err)
-		//}
-		//return r.newAPIClient(apiCaller)
-		// TODO(ericsnow) finish!
-		return nil, errors.Errorf("not implemented")
+		//return newCharmstore()
+		store, err := newCharmstore()
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		return &charmstore{store}, nil
 	}
 	commands.RegisterEnvCommand(func() envcmd.EnvironCommand {
 		return cmd.NewShowCommand(newShowAPIClient)
 	})
+
+	commands.RegisterEnvCommand(func() envcmd.EnvironCommand {
+		return cmd.NewUploadCommand(cmd.UploadDeps{
+			NewClient: func(c *cmd.UploadCommand) (cmd.UploadClient, error) {
+				return r.newClient(c)
+			},
+			OpenResource: func(s string) (io.ReadCloser, error) {
+				return os.Open(s)
+			},
+		})
+
+	})
+}
+
+func newCharmstore() (charmrepo.Interface, error) {
+	// Also see apiserver/service/charmstore.go.
+	var args charmrepo.NewCharmStoreParams
+	store := charmrepo.NewCharmStore(args)
+	return store, nil
+}
+
+// TODO(ericsnow) Get rid of charmstore one charmrepo.Interface grows the methods.
+
+type charmstore struct {
+	charmrepo.Interface
+}
+
+func (charmstore) ListResources(charmURLs []charm.URL) ([][]charmresource.Resource, error) {
+	// TODO(ericsnow) finish!
+	return nil, errors.Errorf("not implemented")
+}
+
+func (charmstore) Close() error {
+	return nil
+}
+
+type apicommand interface {
+	NewAPIRoot() (api.Connection, error)
+}
+
+func (resources) newClient(command apicommand) (*client.Client, error) {
+	apiCaller, err := command.NewAPIRoot()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	caller := base.NewFacadeCallerForVersion(apiCaller, resource.ComponentName, server.Version)
+
+	return client.NewClient(caller, apiCaller), nil
 }
